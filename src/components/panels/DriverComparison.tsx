@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { PanelWrapper } from "@/components/layout/PanelWrapper";
 import { DriverTag } from "@/components/shared/DriverTag";
-import { useDrivers, useLaps } from "@/hooks/useOpenF1";
+import { useDrivers, useLaps } from "@/hooks/useF1Data";
 import { formatLapTime } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 

@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useMemo } from "react";
 import { PanelWrapper } from "@/components/layout/PanelWrapper";
-import { useRaceControl } from "@/hooks/useOpenF1";
+import { useRaceControl } from "@/hooks/useF1Data";
 import { FLAG_COLORS } from "@/lib/constants";
 
 interface RaceControlFeedProps {
@@ -107,7 +107,9 @@ export function RaceControlFeed({
                     ? "rgba(255, 255, 255, 0.01)"
                     : "transparent",
                 borderBottom: "1px solid rgba(255, 255, 255, 0.03)",
-                borderLeft: flagColor ? `3px solid ${flagColor}` : "3px solid transparent",
+                borderLeft: flagColor
+                  ? `3px solid ${flagColor}`
+                  : "3px solid transparent",
                 animation: `slide-in-right 0.3s ease-out ${i * 0.03}s both`,
               }}
             >

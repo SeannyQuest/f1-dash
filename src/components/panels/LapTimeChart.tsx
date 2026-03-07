@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { PanelWrapper } from "@/components/layout/PanelWrapper";
-import { useDrivers, useLaps } from "@/hooks/useOpenF1";
+import { useDrivers, useLaps } from "@/hooks/useF1Data";
 import {
   LineChart,
   Line,

@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { PanelWrapper } from "@/components/layout/PanelWrapper";
 import { TireIcon } from "@/components/shared/TireIcon";
 import { DriverTag } from "@/components/shared/DriverTag";
-import { useStints, useDrivers, usePositions } from "@/hooks/useOpenF1";
+import { useStints, useDrivers, usePositions } from "@/hooks/useF1Data";
 import { TIRE_COLORS } from "@/lib/constants";
 
 interface TireStrategyProps {

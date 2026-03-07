@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PanelWrapper } from "@/components/layout/PanelWrapper";
-import { useDrivers } from "@/hooks/useOpenF1";
+import { useDrivers } from "@/hooks/useF1Data";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useLiveTiming } from "@/contexts/LiveTimingContext";
 

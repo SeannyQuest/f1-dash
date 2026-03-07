@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { useWeather } from "@/hooks/useOpenF1";
+import { useWeather } from "@/hooks/useF1Data";
 import { Thermometer, Droplets, Wind, CloudRain } from "lucide-react";
 
 interface WeatherStripProps {
@@ -9,7 +9,10 @@ interface WeatherStripProps {
   refetchInterval: number | false;
 }
 
-export function WeatherStrip({ sessionKey, refetchInterval }: WeatherStripProps) {
+export function WeatherStrip({
+  sessionKey,
+  refetchInterval,
+}: WeatherStripProps) {
   const { data: weatherData } = useWeather(sessionKey, refetchInterval);
 
   const latest = useMemo(() => {
@@ -36,22 +39,30 @@ export function WeatherStrip({ sessionKey, refetchInterval }: WeatherStripProps)
       {isRaining && <CloudRain className="w-3.5 h-3.5 text-blue-400" />}
       <span className="flex items-center gap-1">
         <Thermometer className="w-3 h-3 text-orange-400" />
-        <span className="text-white/70 font-semibold">{Number(latest.air_temperature).toFixed(1)}&deg;</span>
+        <span className="text-white/70 font-semibold">
+          {Number(latest.air_temperature).toFixed(1)}&deg;
+        </span>
       </span>
       <div className="w-px h-3 bg-white/10" />
       <span className="flex items-center gap-1">
         <Thermometer className="w-3 h-3 text-red-400" />
-        <span className="text-white/70 font-semibold">{Number(latest.track_temperature).toFixed(1)}&deg;</span>
+        <span className="text-white/70 font-semibold">
+          {Number(latest.track_temperature).toFixed(1)}&deg;
+        </span>
       </span>
       <div className="w-px h-3 bg-white/10" />
       <span className="flex items-center gap-1">
         <Droplets className="w-3 h-3 text-blue-400" />
-        <span className="text-white/70 font-semibold">{Number(latest.humidity).toFixed(0)}%</span>
+        <span className="text-white/70 font-semibold">
+          {Number(latest.humidity).toFixed(0)}%
+        </span>
       </span>
       <div className="w-px h-3 bg-white/10" />
       <span className="flex items-center gap-1">
         <Wind className="w-3 h-3 text-white/50" />
-        <span className="text-white/70 font-semibold">{Number(latest.wind_speed).toFixed(1)} m/s</span>
+        <span className="text-white/70 font-semibold">
+          {Number(latest.wind_speed).toFixed(1)} m/s
+        </span>
       </span>
     </div>
   );

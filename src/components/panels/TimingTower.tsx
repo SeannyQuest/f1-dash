@@ -10,7 +10,7 @@ import {
   useLaps,
   useIntervals,
   useStints,
-} from "@/hooks/useOpenF1";
+} from "@/hooks/useF1Data";
 import {
   formatLapTime,
   formatGap,
@@ -24,7 +24,10 @@ interface TimingTowerProps {
   refetchInterval: number | false;
 }
 
-const POSITION_STYLES: Record<number, { bg: string; badge: string; glow: string }> = {
+const POSITION_STYLES: Record<
+  number,
+  { bg: string; badge: string; glow: string }
+> = {
   1: {
     bg: "rgba(255, 215, 0, 0.08)",
     badge: "linear-gradient(135deg, #FFD700 0%, #FFA500 100%)",
@@ -193,17 +196,32 @@ export function TimingTower({
             <tr
               className="text-[10px] uppercase tracking-wider"
               style={{
-                background: "linear-gradient(90deg, rgba(225, 6, 0, 0.06) 0%, transparent 50%)",
+                background:
+                  "linear-gradient(90deg, rgba(225, 6, 0, 0.06) 0%, transparent 50%)",
                 borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
               }}
             >
-              <th className="text-left py-1.5 pl-3 pr-1 w-8 text-white/40 font-bold">P</th>
-              <th className="text-left py-1.5 pr-1 text-white/40 font-bold">Driver</th>
-              <th className="text-center py-1.5 px-1 w-12 text-white/40 font-bold">Sectors</th>
-              <th className="text-right py-1.5 px-1 text-white/40 font-bold">Gap</th>
-              <th className="text-right py-1.5 px-1 text-white/40 font-bold">Int</th>
-              <th className="text-right py-1.5 px-1 text-white/40 font-bold">Last</th>
-              <th className="text-right py-1.5 pr-3 pl-1 text-white/40 font-bold">Best</th>
+              <th className="text-left py-1.5 pl-3 pr-1 w-8 text-white/40 font-bold">
+                P
+              </th>
+              <th className="text-left py-1.5 pr-1 text-white/40 font-bold">
+                Driver
+              </th>
+              <th className="text-center py-1.5 px-1 w-12 text-white/40 font-bold">
+                Sectors
+              </th>
+              <th className="text-right py-1.5 px-1 text-white/40 font-bold">
+                Gap
+              </th>
+              <th className="text-right py-1.5 px-1 text-white/40 font-bold">
+                Int
+              </th>
+              <th className="text-right py-1.5 px-1 text-white/40 font-bold">
+                Last
+              </th>
+              <th className="text-right py-1.5 pr-3 pl-1 text-white/40 font-bold">
+                Best
+              </th>
             </tr>
           </thead>
           <tbody>
