@@ -4,10 +4,14 @@ import { NextRequest, NextResponse } from "next/server";
 // that match the OpenF1 location coordinate space
 const MULTIVIEWER_API = "https://api.multiviewer.app/api/v1/circuits";
 
-interface CircuitResponse {
-  x: number[];
-  y: number[];
-  corners: { number: number; letter: string; x: number; y: number; angle: number }[];
+interface RawCorner {
+  number: number;
+  letter?: string;
+  angle: number;
+  // Some circuits use { x, y } directly, others use { trackPosition: { x, y } }
+  x?: number;
+  y?: number;
+  trackPosition?: { x: number; y: number };
 }
 
 export async function GET(req: NextRequest) {
@@ -15,24 +19,47 @@ export async function GET(req: NextRequest) {
   const year = req.nextUrl.searchParams.get("year");
 
   if (!circuitKey) {
-    return NextResponse.json({ error: "circuit_key required" }, { status: 400 });
+    return NextResponse.json(
+      { error: "circuit_key required" },
+      { status: 400 },
+    );
   }
 
   try {
     const url = `${MULTIVIEWER_API}/${circuitKey}/${year || new Date().getFullYear()}`;
     const res = await fetch(url, {
-      next: { revalidate: 86400 }, // Cache for 24h — circuit data doesn't change
+      next: { revalidate: 86400 },
     });
 
     if (!res.ok) {
-      return NextResponse.json({ error: `MultiViewer API error: ${res.status}` }, { status: 502 });
+      return NextResponse.json(
+        { error: `MultiViewer API error: ${res.status}` },
+        { status: 502 },
+      );
     }
 
-    const data: CircuitResponse = await res.json();
-    return NextResponse.json(data, {
-      headers: { "Cache-Control": "public, s-maxage=86400, stale-while-revalidate=172800" },
-    });
+    const data = await res.json();
+
+    // Normalize corner data — MultiViewer uses trackPosition.x/y on some circuits
+    const corners = (data.corners || []).map((c: RawCorner) => ({
+      number: c.number,
+      x: c.trackPosition?.x ?? c.x,
+      y: c.trackPosition?.y ?? c.y,
+    }));
+
+    return NextResponse.json(
+      { x: data.x, y: data.y, corners },
+      {
+        headers: {
+          "Cache-Control":
+            "public, s-maxage=86400, stale-while-revalidate=172800",
+        },
+      },
+    );
   } catch {
-    return NextResponse.json({ error: "Failed to fetch circuit data" }, { status: 502 });
+    return NextResponse.json(
+      { error: "Failed to fetch circuit data" },
+      { status: 502 },
+    );
   }
 }
