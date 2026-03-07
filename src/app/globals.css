@@ -1,0 +1,63 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-obsidian: rgb(10, 10, 14);
+  --color-obsidian-light: rgb(18, 18, 24);
+  --color-obsidian-card: rgba(255, 255, 255, 0.04);
+  --color-cyan-primary: rgb(0, 224, 255);
+  --color-cyan-dim: rgb(0, 160, 200);
+  --color-cyan-glow: rgba(0, 224, 255, 0.15);
+  --color-red-flag: rgb(255, 24, 24);
+  --color-yellow-flag: rgb(255, 208, 0);
+  --color-green-flag: rgb(0, 210, 90);
+  --color-purple-sector: rgb(168, 85, 247);
+  --color-tire-soft: rgb(255, 24, 24);
+  --color-tire-medium: rgb(255, 208, 0);
+  --color-tire-hard: rgb(255, 255, 255);
+  --color-tire-inter: rgb(0, 210, 90);
+  --color-tire-wet: rgb(0, 140, 255);
+  --font-sans: "Outfit", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+:root {
+  --background: rgb(10, 10, 14);
+  --foreground: rgb(230, 230, 235);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(0, 224, 255);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgb(18, 18, 24);
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(60, 60, 70);
+  border-radius: 3px;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
