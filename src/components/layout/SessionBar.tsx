@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useMeetings, useSessions } from "@/hooks/useOpenF1";
+import { useLiveTiming } from "@/contexts/LiveTimingContext";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { SessionSelection } from "@/hooks/useSessionState";
 
@@ -28,6 +29,13 @@ export function SessionBar({
   const [year, setYear] = useState(String(currentYear));
   const [meetingKey, setMeetingKey] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const liveTiming = useLiveTiming();
+
+  // Relay is live if connected and has driver data + session info
+  const hasLiveSession =
+    liveTiming.connected &&
+    liveTiming.drivers !== null &&
+    liveTiming.liveSessionInfo.sessionKey !== null;
 
   const {
     data: meetings,
@@ -81,6 +89,42 @@ export function SessionBar({
           </span>
         </div>
       )}
+      {/* Live session auto-connect button */}
+      {hasLiveSession && (
+        <button
+          onClick={() => {
+            const info = liveTiming.liveSessionInfo;
+            onSessionSelect({
+              sessionKey: info.sessionKey!,
+              circuitKey: info.circuitKey ?? undefined,
+              year: info.year ?? undefined,
+            });
+            setCollapsed(true);
+          }}
+          className="mb-2 flex items-center gap-2 w-full px-3 py-2.5 rounded text-left transition-all duration-200 hover:scale-[1.01]"
+          style={{
+            background:
+              "linear-gradient(135deg, rgba(225, 6, 0, 0.25) 0%, rgba(225, 6, 0, 0.08) 100%)",
+            border: "1px solid rgba(225, 6, 0, 0.5)",
+            boxShadow: "0 0 16px rgba(225, 6, 0, 0.15)",
+          }}
+        >
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#E10600] opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#E10600]" />
+          </span>
+          <span className="text-[11px] font-bold text-white/90 uppercase tracking-wider">
+            LIVE — {liveTiming.liveSessionInfo.meetingName ?? "Session"}{" "}
+            {liveTiming.liveSessionInfo.sessionName
+              ? `· ${liveTiming.liveSessionInfo.sessionName}`
+              : ""}
+          </span>
+          <span className="ml-auto text-[10px] text-white/40">
+            Click to connect
+          </span>
+        </button>
+      )}
+
       <div className="flex items-center gap-3">
         {/* Year */}
         <div className="relative">

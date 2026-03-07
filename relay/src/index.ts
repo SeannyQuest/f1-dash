@@ -5,7 +5,7 @@ import { BroadcastServer } from "./ws-server.js";
 const WS_PORT = parseInt(process.env.PORT || "8080", 10);
 const BROADCAST_INTERVAL = parseInt(
   process.env.BROADCAST_INTERVAL || "1000",
-  10
+  10,
 );
 
 console.log("=== F1 Live Timing Relay ===");
@@ -23,6 +23,13 @@ const broadcast = new BroadcastServer(WS_PORT, stateManager);
 
 // Wire up: SignalR data → state manager
 signalr.on("data", (topic: string, data: unknown) => {
+  // Log Position/CarData arrivals for debugging
+  if (topic === "Position" || topic === "CarData") {
+    const preview = JSON.stringify(data)?.slice(0, 150) ?? "null";
+    console.log(
+      `[Data] ${topic}: ${Array.isArray(data) ? "array" : typeof data} — ${preview}`,
+    );
+  }
   stateManager.update(topic, data);
 });
 
@@ -49,12 +56,14 @@ setInterval(() => {
     ? `${((Date.now() - state._lastUpdate) / 1000).toFixed(1)}s ago`
     : "never";
 
+  const hasPosition = state.Position !== null;
   console.log(
     `[Health] SignalR: ${signalr.connected ? "connected" : "disconnected"} | ` +
       `Clients: ${broadcast.getClientCount()} | ` +
       `Drivers: ${driverCount} | ` +
       `Timing: ${hasTimingData ? "yes" : "no"} | ` +
-      `Last update: ${lastUpdate}`
+      `Position: ${hasPosition ? "yes" : "no"} | ` +
+      `Last update: ${lastUpdate}`,
   );
 }, 30_000);
 

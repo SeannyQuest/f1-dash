@@ -1,7 +1,11 @@
 /**
  * Transforms raw F1 SignalR state into the flat types our components expect.
- * The SignalR feed uses nested objects keyed by driver number,
- * while our components expect arrays matching the OpenF1 REST API shape.
+ *
+ * IMPORTANT: The SignalR feed nests per-driver data under `.Lines` sub-objects:
+ *   - TimingData.Lines["1"] = timing for driver #1
+ *   - TimingAppData.Lines["1"] = stint data for driver #1
+ *   - TimingStats.Lines["1"] = stats for driver #1
+ *   - RaceControlMessages.Messages["35"] = message #35
  */
 
 import type {
@@ -17,15 +21,28 @@ import type { DriverLocation } from "@/hooks/useWebSocket";
 
 // Raw SignalR state shape (from relay server)
 export interface F1LiveState {
-  TimingData: Record<string, RawTimingDriver>;
-  TimingStats: Record<string, RawTimingStats>;
-  TimingAppData: Record<string, RawTimingAppDriver>;
+  TimingData: {
+    Lines?: Record<string, RawTimingDriver>;
+    SessionPart?: number;
+    [key: string]: unknown;
+  };
+  TimingStats: {
+    Lines?: Record<string, RawTimingStats>;
+    [key: string]: unknown;
+  };
+  TimingAppData: {
+    Lines?: Record<string, RawTimingAppDriver>;
+    [key: string]: unknown;
+  };
   Position: RawPositionData | null;
   CarData: RawCarData | null;
   WeatherData: Record<string, string>;
   TrackStatus: Record<string, string>;
   DriverList: Record<string, RawDriver>;
-  RaceControlMessages: Record<string, RawRCM>;
+  RaceControlMessages: {
+    Messages?: Record<string, RawRCM>;
+    [key: string]: unknown;
+  };
   SessionInfo: Record<string, unknown>;
   SessionData: Record<string, unknown>;
   ExtrapolatedClock: Record<string, unknown>;
@@ -40,7 +57,7 @@ interface RawDriver {
   RacingNumber?: string;
   BroadcastName?: string;
   FullName?: string;
-  Tla?: string; // Three-letter abbreviation
+  Tla?: string;
   FirstName?: string;
   LastName?: string;
   TeamName?: string;
@@ -59,16 +76,28 @@ interface RawTimingDriver {
   >;
   Speeds?: Record<string, { Value?: string }>;
   BestLapTime?: { Value?: string };
-  LastLapTime?: { Value?: string; PersonalFastest?: boolean; OverallFastest?: boolean };
+  BestLapTimes?: Record<string, { Value?: string; Lap?: number }>;
+  LastLapTime?: {
+    Value?: string;
+    PersonalFastest?: boolean;
+    OverallFastest?: boolean;
+  };
   NumberOfLaps?: number;
+  Stats?: Record<
+    string,
+    { TimeDiffToFastest?: string; TimeDifftoPositionAhead?: string }
+  >;
   InPit?: boolean;
   PitOut?: boolean;
+  KnockedOut?: boolean;
+  Retired?: boolean;
+  Stopped?: boolean;
 }
 
 interface RawTimingStats {
-  PersonalBestLapTime?: { Value?: string };
-  BestSectors?: Record<string, { Value?: string }>;
-  BestSpeeds?: Record<string, { Value?: string }>;
+  PersonalBestLapTime?: { Value?: string; Lap?: number; Position?: number };
+  BestSectors?: Record<string, { Value?: string; Position?: number }>;
+  BestSpeeds?: Record<string, { Value?: string; Position?: number }>;
 }
 
 interface RawTimingAppDriver {
@@ -80,6 +109,7 @@ interface RawTimingAppDriver {
       TotalLaps?: number;
       StartLaps?: number;
       LapNumber?: number;
+      LapTime?: string;
     }
   >;
   CurrentTyreStartLap?: number;
@@ -99,7 +129,10 @@ interface RawRCM {
 interface RawPositionData {
   Position?: Array<{
     Timestamp?: string;
-    Entries?: Record<string, { X: number; Y: number; Z: number; Status?: string }>;
+    Entries?: Record<
+      string,
+      { X: number; Y: number; Z: number; Status?: string }
+    >;
   }>;
 }
 
@@ -108,6 +141,15 @@ interface RawCarData {
     Utc?: string;
     Cars?: Record<string, { Channels?: Record<string, number> }>;
   }>;
+}
+
+// ── Helper to get Lines from a topic ──
+
+function getLines<T>(
+  topic: { Lines?: Record<string, T> } | Record<string, unknown>,
+): Record<string, T> {
+  const t = topic as { Lines?: Record<string, T> };
+  return t.Lines ?? ({} as Record<string, T>);
 }
 
 // ── Adapter functions ──
@@ -135,11 +177,15 @@ export function adaptDrivers(state: F1LiveState, sessionKey: number): Driver[] {
   return drivers;
 }
 
-export function adaptPositions(state: F1LiveState, sessionKey: number): Position[] {
+export function adaptPositions(
+  state: F1LiveState,
+  sessionKey: number,
+): Position[] {
   const positions: Position[] = [];
   const now = new Date().toISOString();
+  const lines = getLines<RawTimingDriver>(state.TimingData);
 
-  for (const [num, timing] of Object.entries(state.TimingData)) {
+  for (const [num, timing] of Object.entries(lines)) {
     if (!timing.Position) continue;
     positions.push({
       driver_number: parseInt(num, 10),
@@ -155,7 +201,6 @@ export function adaptPositions(state: F1LiveState, sessionKey: number): Position
 
 function parseTime(timeStr: string | undefined): number | null {
   if (!timeStr) return null;
-  // Format: "1:23.456" or "23.456"
   const parts = timeStr.split(":");
   if (parts.length === 2) {
     return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
@@ -167,8 +212,9 @@ function parseTime(timeStr: string | undefined): number | null {
 export function adaptLaps(state: F1LiveState, sessionKey: number): Lap[] {
   const laps: Lap[] = [];
   const now = new Date().toISOString();
+  const lines = getLines<RawTimingDriver>(state.TimingData);
 
-  for (const [num, timing] of Object.entries(state.TimingData)) {
+  for (const [num, timing] of Object.entries(lines)) {
     const driverNum = parseInt(num, 10);
     const lapDuration = parseTime(timing.LastLapTime?.Value);
     const sectors = timing.Sectors ?? {};
@@ -194,18 +240,49 @@ export function adaptLaps(state: F1LiveState, sessionKey: number): Lap[] {
   return laps;
 }
 
-export function adaptIntervals(state: F1LiveState, sessionKey: number): Interval[] {
+export function adaptIntervals(
+  state: F1LiveState,
+  sessionKey: number,
+): Interval[] {
   const intervals: Interval[] = [];
   const now = new Date().toISOString();
+  const lines = getLines<RawTimingDriver>(state.TimingData);
 
-  for (const [num, timing] of Object.entries(state.TimingData)) {
+  for (const [num, timing] of Object.entries(lines)) {
     const gap = timing.GapToLeader;
     const interval = timing.IntervalToPositionAhead?.Value;
 
+    // For qualifying, gap info is in Stats keyed by session part
+    let gapValue: number | null = null;
+    let intValue: number | null = null;
+
+    if (gap) {
+      gapValue = parseFloat(gap.replace("+", "")) || 0;
+    } else if (timing.Stats) {
+      // Use the latest session part stats
+      const partKeys = Object.keys(timing.Stats).sort();
+      const latestPart = partKeys[partKeys.length - 1];
+      if (latestPart) {
+        const stat = timing.Stats[latestPart];
+        if (stat?.TimeDiffToFastest) {
+          gapValue =
+            parseFloat(stat.TimeDiffToFastest.replace("+", "")) || null;
+        }
+        if (stat?.TimeDifftoPositionAhead) {
+          intValue =
+            parseFloat(stat.TimeDifftoPositionAhead.replace("+", "")) || null;
+        }
+      }
+    }
+
+    if (interval) {
+      intValue = parseFloat(interval.replace("+", "")) || 0;
+    }
+
     intervals.push({
       driver_number: parseInt(num, 10),
-      gap_to_leader: gap ? parseFloat(gap.replace("+", "")) || 0 : null,
-      interval: interval ? parseFloat(interval.replace("+", "")) || 0 : null,
+      gap_to_leader: gapValue,
+      interval: intValue,
       date: now,
       session_key: sessionKey,
     });
@@ -216,18 +293,36 @@ export function adaptIntervals(state: F1LiveState, sessionKey: number): Interval
 
 export function adaptStints(state: F1LiveState, sessionKey: number): Stint[] {
   const stints: Stint[] = [];
+  const lines = getLines<RawTimingAppDriver>(state.TimingAppData);
 
-  for (const [num, appData] of Object.entries(state.TimingAppData)) {
+  for (const [num, appData] of Object.entries(lines)) {
     const driverNum = parseInt(num, 10);
     if (!appData.Stints) continue;
 
-    for (const [stintNum, stint] of Object.entries(appData.Stints)) {
+    // Stints can be an object or array — normalize to entries
+    const stintEntries =
+      typeof appData.Stints === "object" && !Array.isArray(appData.Stints)
+        ? Object.entries(appData.Stints)
+        : (appData.Stints as unknown as Array<unknown>).map(
+            (s, i) =>
+              [String(i), s] as [string, (typeof appData.Stints)[string]],
+          );
+
+    for (const [stintNum, stint] of stintEntries) {
+      if (!stint || typeof stint !== "object") continue;
+      const s = stint as {
+        Compound?: string;
+        New?: string;
+        TotalLaps?: number;
+        StartLaps?: number;
+        LapNumber?: number;
+      };
       stints.push({
         driver_number: driverNum,
         stint_number: parseInt(stintNum, 10) + 1,
-        lap_start: stint.StartLaps ?? stint.LapNumber ?? 0,
-        lap_end: (stint.StartLaps ?? 0) + (stint.TotalLaps ?? 0),
-        compound: (stint.Compound?.toUpperCase() ?? "UNKNOWN") as Stint["compound"],
+        lap_start: s.StartLaps ?? s.LapNumber ?? 0,
+        lap_end: (s.StartLaps ?? 0) + (s.TotalLaps ?? 0),
+        compound: (s.Compound?.toUpperCase() ?? "UNKNOWN") as Stint["compound"],
         tyre_age_at_start: 0,
         session_key: sessionKey,
       });
@@ -237,7 +332,10 @@ export function adaptStints(state: F1LiveState, sessionKey: number): Stint[] {
   return stints;
 }
 
-export function adaptWeather(state: F1LiveState, sessionKey: number): Weather[] {
+export function adaptWeather(
+  state: F1LiveState,
+  sessionKey: number,
+): Weather[] {
   const w = state.WeatherData;
   if (!w.AirTemp && !w.TrackTemp) return [];
 
@@ -259,38 +357,18 @@ export function adaptWeather(state: F1LiveState, sessionKey: number): Weather[] 
 
 export function adaptRaceControl(
   state: F1LiveState,
-  sessionKey: number
+  sessionKey: number,
 ): RaceControlMessage[] {
   const messages: RaceControlMessage[] = [];
 
-  for (const [, msg] of Object.entries(state.RaceControlMessages)) {
-    // The Messages sub-object contains the actual messages
-    if (!msg.Message) {
-      // It might be nested under a "Messages" key
-      const nested = msg as unknown as { Messages?: Record<string, RawRCM> };
-      if (nested.Messages) {
-        for (const [, innerMsg] of Object.entries(nested.Messages)) {
-          if (innerMsg.Message) {
-            messages.push({
-              date: innerMsg.Utc ?? new Date().toISOString(),
-              category: innerMsg.Category ?? "",
-              flag: innerMsg.Flag,
-              message: innerMsg.Message,
-              scope: innerMsg.Scope,
-              sector: innerMsg.Sector ? parseInt(innerMsg.Sector, 10) : undefined,
-              driver_number: innerMsg.RacingNumber
-                ? parseInt(innerMsg.RacingNumber, 10)
-                : undefined,
-              lap_number: innerMsg.Lap,
-              session_key: sessionKey,
-              meeting_key: 0,
-            });
-          }
-        }
-      }
-      continue;
-    }
+  // Messages are nested under RaceControlMessages.Messages
+  const rcm = state.RaceControlMessages;
+  const msgObj =
+    (rcm.Messages as Record<string, RawRCM> | undefined) ??
+    ({} as Record<string, RawRCM>);
 
+  for (const [, msg] of Object.entries(msgObj)) {
+    if (!msg.Message) continue;
     messages.push({
       date: msg.Utc ?? new Date().toISOString(),
       category: msg.Category ?? "",
@@ -313,11 +391,31 @@ export function adaptRaceControl(
 export function adaptTrackPositions(state: F1LiveState): DriverLocation[] {
   if (!state.Position) return [];
 
-  const posData = state.Position;
-  if (!posData.Position || posData.Position.length === 0) return [];
+  // Position.z decompresses to either:
+  //   a) Array of {Timestamp, Entries} directly
+  //   b) {Position: [{Timestamp, Entries}]} wrapper
+  type PosEntry = {
+    Timestamp?: string;
+    Entries?: Record<string, { X: number; Y: number; Z: number }>;
+  };
+
+  let posArray: PosEntry[] | null = null;
+
+  if (Array.isArray(state.Position)) {
+    posArray = state.Position as unknown as PosEntry[];
+  } else if (
+    state.Position &&
+    typeof state.Position === "object" &&
+    "Position" in state.Position &&
+    Array.isArray((state.Position as RawPositionData).Position)
+  ) {
+    posArray = (state.Position as RawPositionData).Position as PosEntry[];
+  }
+
+  if (!posArray || posArray.length === 0) return [];
 
   // Use the latest position entry
-  const latest = posData.Position[posData.Position.length - 1];
+  const latest = posArray[posArray.length - 1];
   if (!latest?.Entries) return [];
 
   const locations: DriverLocation[] = [];

@@ -21,12 +21,19 @@ function DashboardInner() {
   // Live if the relay is connected and has driver data
   const isLive = liveTiming.connected && liveTiming.drivers !== null;
 
+  // Build session label from live info or URL params
+  const sessionLabel =
+    isLive && liveTiming.liveSessionInfo.meetingName
+      ? `${liveTiming.liveSessionInfo.meetingName}${liveTiming.liveSessionInfo.sessionName ? ` · ${liveTiming.liveSessionInfo.sessionName}` : ""}`
+      : undefined;
+
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       <Header
         sessionKey={sessionKey}
         isLive={isLive}
         weatherRefetchInterval={false}
+        sessionLabel={sessionLabel}
       />
 
       <SessionBar

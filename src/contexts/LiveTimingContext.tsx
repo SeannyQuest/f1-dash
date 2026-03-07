@@ -35,6 +35,14 @@ import {
 const RELAY_URL =
   process.env.NEXT_PUBLIC_LIVE_RELAY_URL || "ws://localhost:8080";
 
+interface LiveSessionInfo {
+  sessionKey: string | null;
+  circuitKey: string | null;
+  year: string | null;
+  meetingName: string | null;
+  sessionName: string | null;
+}
+
 interface LiveTimingData {
   // Adapted data in component-compatible format
   drivers: Driver[] | null;
@@ -49,6 +57,8 @@ interface LiveTimingData {
   lapCount: { current: number; total: number } | null;
   trackStatus: string | null;
   sessionClock: string | null;
+  // Session info from relay (for auto-selecting live session)
+  liveSessionInfo: LiveSessionInfo;
   // Connection info
   connected: boolean;
   relayStatus: "connected" | "disconnected" | "connecting";
@@ -69,6 +79,13 @@ const LiveTimingContext = createContext<LiveTimingData>({
   lapCount: null,
   trackStatus: null,
   sessionClock: null,
+  liveSessionInfo: {
+    sessionKey: null,
+    circuitKey: null,
+    year: null,
+    meetingName: null,
+    sessionName: null,
+  },
   connected: false,
   relayStatus: "disconnected",
   lastUpdate: 0,
@@ -153,6 +170,14 @@ export function LiveTimingProvider({
   const sessionKeyNum = sessionKey ? parseInt(sessionKey, 10) : 0;
 
   const adapted = useMemo<LiveTimingData>(() => {
+    const noSession: LiveSessionInfo = {
+      sessionKey: null,
+      circuitKey: null,
+      year: null,
+      meetingName: null,
+      sessionName: null,
+    };
+
     if (!rawState) {
       return {
         drivers: null,
@@ -166,6 +191,7 @@ export function LiveTimingProvider({
         lapCount: null,
         trackStatus: null,
         sessionClock: null,
+        liveSessionInfo: noSession,
         connected: relayStatus === "connected",
         relayStatus,
         lastUpdate,
@@ -176,6 +202,19 @@ export function LiveTimingProvider({
     const lapCount = rawState.LapCount;
     const trackStatus = rawState.TrackStatus;
     const clock = rawState.ExtrapolatedClock;
+
+    // Extract session info from SignalR's SessionInfo topic
+    const si = rawState.SessionInfo ?? {};
+    const meeting = si.Meeting as Record<string, unknown> | undefined;
+    const circuit = meeting?.Circuit as Record<string, unknown> | undefined;
+    const startDate = si.StartDate as string | undefined;
+    const liveSessionInfo: LiveSessionInfo = {
+      sessionKey: si.Key != null ? String(si.Key) : null,
+      circuitKey: circuit?.Key != null ? String(circuit.Key) : null,
+      year: startDate ? startDate.slice(0, 4) : null,
+      meetingName: (meeting?.Name as string) ?? null,
+      sessionName: (si.Name as string) ?? null,
+    };
 
     return {
       drivers: adaptDrivers(rawState, sessionKeyNum),
@@ -195,6 +234,7 @@ export function LiveTimingProvider({
           : null,
       trackStatus: (trackStatus?.Status as string) ?? null,
       sessionClock: (clock?.Remaining as string) ?? null,
+      liveSessionInfo,
       connected: relayStatus === "connected",
       relayStatus,
       lastUpdate,
