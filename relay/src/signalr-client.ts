@@ -65,6 +65,7 @@ export class F1SignalRClient extends EventEmitter {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private keepAliveTimer: ReturnType<typeof setInterval> | null = null;
   private _connected = false;
+  private messageCount = 0;
 
   get connected(): boolean {
     return this._connected;
@@ -93,18 +94,25 @@ export class F1SignalRClient extends EventEmitter {
     }
   }
 
-  private async negotiate(): Promise<void> {
-    const connectionData = encodeURIComponent(
-      JSON.stringify([{ name: HUB }])
-    );
-    const url = `${F1_BASE}/negotiate?connectionData=${connectionData}&clientProtocol=1.5`;
+  private getConnectionData(): string {
+    return encodeURIComponent(JSON.stringify([{ name: HUB }]));
+  }
 
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": "BestHTTP",
-        Accept: "application/json",
-      },
-    });
+  private getHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      "User-Agent": "BestHTTP",
+      Accept: "application/json",
+    };
+    if (this.cookie) {
+      headers["Cookie"] = this.cookie;
+    }
+    return headers;
+  }
+
+  private async negotiate(): Promise<void> {
+    const url = `${F1_BASE}/negotiate?connectionData=${this.getConnectionData()}&clientProtocol=1.5`;
+
+    const res = await fetch(url, { headers: this.getHeaders() });
 
     if (!res.ok) {
       throw new Error(`Negotiate failed: ${res.status} ${res.statusText}`);
@@ -123,13 +131,27 @@ export class F1SignalRClient extends EventEmitter {
     );
   }
 
+  /**
+   * The F1 legacy SignalR protocol requires an HTTP /start call
+   * after the WebSocket is open but before data will flow.
+   */
+  private async callStart(): Promise<void> {
+    const token = encodeURIComponent(this.connectionToken);
+    const url = `${F1_BASE}/start?clientProtocol=1.5&transport=webSockets&connectionToken=${token}&connectionData=${this.getConnectionData()}`;
+
+    const res = await fetch(url, { headers: this.getHeaders() });
+    if (!res.ok) {
+      console.warn(`[SignalR] /start returned ${res.status}`);
+    } else {
+      const body = await res.json();
+      console.log("[SignalR] /start response:", JSON.stringify(body));
+    }
+  }
+
   private openSocket(): Promise<void> {
     return new Promise((resolve, reject) => {
-      const connectionData = encodeURIComponent(
-        JSON.stringify([{ name: HUB }])
-      );
       const token = encodeURIComponent(this.connectionToken);
-      const url = `wss://livetiming.formula1.com/signalr/connect?clientProtocol=1.5&transport=webSockets&connectionToken=${token}&connectionData=${connectionData}`;
+      const url = `wss://livetiming.formula1.com/signalr/connect?clientProtocol=1.5&transport=webSockets&connectionToken=${token}&connectionData=${this.getConnectionData()}`;
 
       const headers: Record<string, string> = {
         "User-Agent": "BestHTTP",
@@ -140,10 +162,19 @@ export class F1SignalRClient extends EventEmitter {
       }
 
       this.ws = new WebSocket(url, { headers });
+      this.messageCount = 0;
 
-      this.ws.on("open", () => {
-        console.log("[SignalR] WebSocket connected, subscribing...");
+      this.ws.on("open", async () => {
+        console.log("[SignalR] WebSocket connected");
         this._connected = true;
+
+        // /start must be called before subscribing
+        try {
+          await this.callStart();
+        } catch (e) {
+          console.warn("[SignalR] /start call failed:", (e as Error).message);
+        }
+
         this.subscribe();
         this.startKeepAlive();
         this.emit("connected");
@@ -151,12 +182,19 @@ export class F1SignalRClient extends EventEmitter {
       });
 
       this.ws.on("message", (raw: Buffer) => {
-        this.handleMessage(raw.toString());
+        const str = raw.toString();
+        this.messageCount++;
+        // Log first few messages for debugging
+        if (this.messageCount <= 5) {
+          const preview = str.length > 200 ? str.slice(0, 200) + "..." : str;
+          console.log(`[SignalR] Message #${this.messageCount}: ${preview}`);
+        }
+        this.handleMessage(str);
       });
 
       this.ws.on("close", (code, reason) => {
         console.log(
-          `[SignalR] WebSocket closed: ${code} ${reason.toString()}`
+          `[SignalR] WebSocket closed: ${code} ${reason.toString()} (after ${this.messageCount} messages)`
         );
         this._connected = false;
         this.emit("disconnected");
@@ -181,12 +219,11 @@ export class F1SignalRClient extends EventEmitter {
     });
 
     this.ws.send(msg);
-    console.log(`[SignalR] Subscribed to ${TOPICS.length} topics`);
+    console.log(`[SignalR] Sent subscribe for ${TOPICS.length} topics`);
   }
 
   private startKeepAlive(): void {
     if (this.keepAliveTimer) clearInterval(this.keepAliveTimer);
-    // Send empty object as keep-alive every 10s
     this.keepAliveTimer = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send("{}");
@@ -200,15 +237,26 @@ export class F1SignalRClient extends EventEmitter {
     try {
       const msg: SignalRMessage = JSON.parse(raw);
 
-      // Initial response with full state snapshot
-      if (msg.R && msg.I === "1") {
-        console.log("[SignalR] Received initial state snapshot");
-        for (const [topic, data] of Object.entries(msg.R)) {
-          const decompressed = topic.endsWith(".z")
-            ? decompressZlib(data as string)
-            : data;
-          if (decompressed != null) {
-            this.emit("data", topic.replace(".z", ""), decompressed);
+      // Initial handshake response (S:1 means server is ready)
+      if (msg.S === 1) {
+        console.log("[SignalR] Server init received (S:1)");
+        return;
+      }
+
+      // Response to our subscribe invocation (I:1)
+      if (msg.I === "1" && msg.R !== undefined) {
+        console.log("[SignalR] Subscribe response received");
+        // The R field contains the initial state snapshot
+        if (msg.R && typeof msg.R === "object") {
+          const entries = Object.entries(msg.R);
+          console.log(`[SignalR] Initial snapshot has ${entries.length} topics`);
+          for (const [topic, data] of entries) {
+            const decompressed = topic.endsWith(".z")
+              ? decompressZlib(data as string)
+              : data;
+            if (decompressed != null) {
+              this.emit("data", topic.replace(".z", ""), decompressed);
+            }
           }
         }
         return;
