@@ -17,10 +17,12 @@ async function getAccessToken(): Promise<string | null> {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ username, password }).toString(),
+    cache: "no-store",
   });
 
   if (!res.ok) {
-    console.error(`OpenF1 token error: ${res.status}`);
+    const errBody = await res.text().catch(() => "");
+    console.error(`OpenF1 token error: ${res.status} ${errBody}`);
     return null;
   }
 
@@ -56,7 +58,7 @@ export async function fetchOpenF1<T>(
 
   const res = await fetch(url.toString(), {
     headers,
-    next: { revalidate: options.revalidate ?? 3600 },
+    cache: "no-store",
   });
 
   if (!res.ok) {

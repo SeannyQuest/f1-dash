@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PanelWrapper } from "@/components/layout/PanelWrapper";
-import { useDrivers, usePositions } from "@/hooks/useOpenF1";
+import { useDrivers } from "@/hooks/useOpenF1";
+import { useWebSocket } from "@/hooks/useWebSocket";
 
 interface TrackMapProps {
   sessionKey: string | null;
@@ -10,37 +11,137 @@ interface TrackMapProps {
   refetchInterval: number | false;
 }
 
-// Generic oval track path for when we don't have circuit-specific data
-const GENERIC_TRACK_PATH = "M 500 100 C 800 100 900 200 900 400 C 900 600 800 700 500 700 C 200 700 100 600 100 400 C 100 200 200 100 500 100 Z";
-
-function getPointOnPath(pathElement: SVGPathElement | null, fraction: number): { x: number; y: number } {
-  if (!pathElement) return { x: 500, y: 400 };
-  const length = pathElement.getTotalLength();
-  const point = pathElement.getPointAtLength(fraction * length);
-  return { x: point.x, y: point.y };
+interface CircuitData {
+  x: number[];
+  y: number[];
+  corners: { number: number; letter: string; x: number; y: number; angle: number }[];
 }
 
-export function TrackMap({ sessionKey, isLive, refetchInterval }: TrackMapProps) {
+interface Bounds {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+  width: number;
+  height: number;
+}
+
+const PADDING = 60;
+const VIEW_SIZE = 800;
+
+function computeBounds(x: number[], y: number[]): Bounds {
+  const minX = Math.min(...x);
+  const maxX = Math.max(...x);
+  const minY = Math.min(...y);
+  const maxY = Math.max(...y);
+  return { minX, maxX, minY, maxY, width: maxX - minX, height: maxY - minY };
+}
+
+function transformPoint(
+  px: number,
+  py: number,
+  bounds: Bounds
+): { x: number; y: number } {
+  const scale = (VIEW_SIZE - PADDING * 2) / Math.max(bounds.width, bounds.height);
+  const offsetX = (VIEW_SIZE - bounds.width * scale) / 2;
+  const offsetY = (VIEW_SIZE - bounds.height * scale) / 2;
+  return {
+    x: (px - bounds.minX) * scale + offsetX,
+    y: (py - bounds.minY) * scale + offsetY,
+  };
+}
+
+export function TrackMap({ sessionKey, isLive }: TrackMapProps) {
   const { data: drivers } = useDrivers(sessionKey);
-  const { data: positions } = usePositions(sessionKey, refetchInterval);
+  const { locations, connected } = useWebSocket(sessionKey);
+  const [circuit, setCircuit] = useState<CircuitData | null>(null);
+  const [circuitLoading, setCircuitLoading] = useState(false);
 
-  const driverPositions = useMemo(() => {
-    if (!drivers || !positions) return [];
+  // Fetch circuit data when session changes
+  useEffect(() => {
+    if (!sessionKey) {
+      setCircuit(null);
+      return;
+    }
 
-    // Get latest position for each driver
-    const latestPositions = new Map<number, number>();
-    positions.forEach((p) => {
-      latestPositions.set(p.driver_number, p.position);
+    let cancelled = false;
+
+    async function loadCircuit() {
+      setCircuitLoading(true);
+      try {
+        // Get session info for circuit_key
+        const sessRes = await fetch(`/api/f1/sessions?session_key_override=${sessionKey}`);
+        const sessions = await sessRes.json();
+        if (cancelled || !Array.isArray(sessions) || sessions.length === 0) return;
+
+        const circuitKey = sessions[0].circuit_key;
+        const year = sessions[0].year;
+
+        const circRes = await fetch(`/api/f1/circuit?circuit_key=${circuitKey}&year=${year}`);
+        if (cancelled || !circRes.ok) return;
+
+        const data = await circRes.json();
+        if (!cancelled && data.x && data.y) {
+          setCircuit(data);
+        }
+      } catch {
+        // Fall back to no circuit data
+      } finally {
+        if (!cancelled) setCircuitLoading(false);
+      }
+    }
+
+    loadCircuit();
+    return () => { cancelled = true; };
+  }, [sessionKey]);
+
+  const bounds = useMemo(() => {
+    if (!circuit) return null;
+    return computeBounds(circuit.x, circuit.y);
+  }, [circuit]);
+
+  // Build the track outline path
+  const trackPath = useMemo(() => {
+    if (!circuit || !bounds) return "";
+    const points = circuit.x.map((x, i) => {
+      const p = transformPoint(x, circuit.y[i], bounds);
+      return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
     });
+    return `M ${points.join(" L ")} Z`;
+  }, [circuit, bounds]);
 
-    return drivers
-      .map((d) => ({
-        driver: d,
-        position: latestPositions.get(d.driver_number) ?? 99,
-      }))
-      .filter((d) => d.position < 99)
-      .sort((a, b) => a.position - b.position);
-  }, [drivers, positions]);
+  // Map driver locations to screen positions
+  const driverDots = useMemo(() => {
+    if (!bounds || !drivers) return [];
+
+    const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
+
+    return locations
+      .filter((loc) => driverMap.has(loc.driver_number))
+      .map((loc) => {
+        const driver = driverMap.get(loc.driver_number)!;
+        const pos = transformPoint(loc.x, loc.y, bounds);
+        const color = driver.team_colour.startsWith("#")
+          ? driver.team_colour
+          : `#${driver.team_colour}`;
+        return {
+          key: loc.driver_number,
+          x: pos.x,
+          y: pos.y,
+          color,
+          acronym: driver.name_acronym,
+        };
+      });
+  }, [locations, bounds, drivers]);
+
+  // Transform corner positions
+  const corners = useMemo(() => {
+    if (!circuit?.corners || !bounds) return [];
+    return circuit.corners.map((c) => {
+      const pos = transformPoint(c.x, c.y, bounds);
+      return { number: c.number, x: pos.x, y: pos.y };
+    });
+  }, [circuit, bounds]);
 
   if (!sessionKey) {
     return (
@@ -50,69 +151,138 @@ export function TrackMap({ sessionKey, isLive, refetchInterval }: TrackMapProps)
     );
   }
 
-  const totalDrivers = driverPositions.length || 20;
-
   return (
     <PanelWrapper title="Track Map" isLive={isLive}>
-      <svg viewBox="0 0 1000 800" className="w-full h-auto">
-        {/* Track outline */}
-        <path
-          id="track-path"
-          d={GENERIC_TRACK_PATH}
-          fill="none"
-          stroke="rgba(255,255,255,0.1)"
-          strokeWidth="40"
-          strokeLinecap="round"
+      {/* Connection status */}
+      <div className="flex items-center gap-2 mb-2">
+        <div
+          className={`w-2 h-2 rounded-full ${
+            connected ? "bg-green-400 animate-pulse" : "bg-red-400"
+          }`}
         />
-        <path
-          d={GENERIC_TRACK_PATH}
-          fill="none"
-          stroke="rgba(255,255,255,0.05)"
-          strokeWidth="44"
-          strokeLinecap="round"
-        />
+        <span className="text-[10px] text-white/40 uppercase tracking-wider">
+          {connected ? "Live" : "Connecting..."}
+        </span>
+        {locations.length > 0 && (
+          <span className="text-[10px] text-white/30 ml-auto">
+            {locations.length} cars
+          </span>
+        )}
+      </div>
 
-        {/* Car dots - positioned around the track */}
-        {driverPositions.map((dp) => {
-          const color = dp.driver.team_colour.startsWith("#")
-            ? dp.driver.team_colour
-            : `#${dp.driver.team_colour}`;
-          // Distribute cars evenly around the track
-          const fraction = (dp.position - 1) / totalDrivers;
-          // Use a simple parametric approach for the generic oval
-          const angle = fraction * 2 * Math.PI - Math.PI / 2;
-          const cx = 500 + 350 * Math.cos(angle);
-          const cy = 400 + 250 * Math.sin(angle);
+      {circuitLoading ? (
+        <div className="flex items-center justify-center h-48">
+          <div className="text-white/30 text-sm">Loading circuit...</div>
+        </div>
+      ) : !circuit ? (
+        <div className="flex items-center justify-center h-48">
+          <div className="text-white/30 text-sm">No circuit data available</div>
+        </div>
+      ) : (
+        <svg viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`} className="w-full h-auto">
+          {/* Track surface glow */}
+          <path
+            d={trackPath}
+            fill="none"
+            stroke="rgba(255,255,255,0.03)"
+            strokeWidth="28"
+            strokeLinejoin="round"
+          />
+          {/* Track outline */}
+          <path
+            d={trackPath}
+            fill="none"
+            stroke="rgba(255,255,255,0.12)"
+            strokeWidth="18"
+            strokeLinejoin="round"
+          />
+          {/* Track center line */}
+          <path
+            d={trackPath}
+            fill="none"
+            stroke="rgba(255,255,255,0.04)"
+            strokeWidth="1"
+            strokeDasharray="4 4"
+          />
 
-          return (
-            <g key={dp.driver.driver_number}>
-              {/* Glow */}
-              <circle cx={cx} cy={cy} r={18} fill={`${color}22`} />
-              {/* Dot */}
-              <circle cx={cx} cy={cy} r={10} fill={color} stroke="rgba(0,0,0,0.5)" strokeWidth={2} />
-              {/* Label */}
+          {/* Corner numbers */}
+          {corners.map((c) => (
+            <g key={`corner-${c.number}`}>
+              <circle cx={c.x} cy={c.y} r={8} fill="rgba(255,255,255,0.06)" />
               <text
-                x={cx}
-                y={cy + 1}
+                x={c.x}
+                y={c.y + 1}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill="rgba(255,255,255,0.25)"
+                fontSize="7"
+                fontFamily="monospace"
+              >
+                {c.number}
+              </text>
+            </g>
+          ))}
+
+          {/* Driver dots */}
+          {driverDots.map((dot) => (
+            <g key={dot.key}>
+              {/* Outer glow */}
+              <circle cx={dot.x} cy={dot.y} r={16} fill={`${dot.color}18`} />
+              {/* Car dot */}
+              <circle
+                cx={dot.x}
+                cy={dot.y}
+                r={9}
+                fill={dot.color}
+                stroke="rgba(0,0,0,0.6)"
+                strokeWidth={1.5}
+              />
+              {/* Driver abbreviation */}
+              <text
+                x={dot.x}
+                y={dot.y + 0.5}
                 textAnchor="middle"
                 dominantBaseline="central"
                 fill="white"
-                fontSize="8"
+                fontSize="6.5"
                 fontWeight="bold"
                 fontFamily="monospace"
               >
-                {dp.driver.name_acronym}
+                {dot.acronym}
               </text>
             </g>
-          );
-        })}
+          ))}
 
-        {/* Start/Finish line */}
-        <line x1="500" y1="60" x2="500" y2="140" stroke="white" strokeWidth="3" strokeDasharray="8 4" />
-        <text x="500" y="50" textAnchor="middle" fill="rgba(255,255,255,0.3)" fontSize="12" fontFamily="monospace">
-          S/F
-        </text>
-      </svg>
+          {/* Start/Finish marker — first point on circuit */}
+          {circuit.x.length > 0 && bounds && (() => {
+            const sf = transformPoint(circuit.x[0], circuit.y[0], bounds);
+            return (
+              <g>
+                <rect
+                  x={sf.x - 12}
+                  y={sf.y - 16}
+                  width={24}
+                  height={10}
+                  rx={2}
+                  fill="rgba(255,255,255,0.1)"
+                />
+                <text
+                  x={sf.x}
+                  y={sf.y - 10}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="rgba(255,255,255,0.4)"
+                  fontSize="6"
+                  fontFamily="monospace"
+                  fontWeight="bold"
+                >
+                  S/F
+                </text>
+              </g>
+            );
+          })()}
+        </svg>
+      )}
     </PanelWrapper>
   );
 }

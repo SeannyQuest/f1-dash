@@ -130,12 +130,13 @@ export function LapTimeChart({
               stroke="rgba(255,255,255,0.3)"
               tick={{ fontSize: 11 }}
               domain={["auto", "auto"]}
-              tickFormatter={(v: number) => {
-                const mins = Math.floor(v / 60);
-                const secs = (v % 60).toFixed(0);
+              tickFormatter={(v) => {
+                const n = Number(v);
+                const mins = Math.floor(n / 60);
+                const secs = (n % 60).toFixed(0);
                 return mins > 0
                   ? `${mins}:${secs.padStart(2, "0")}`
-                  : `${v.toFixed(0)}s`;
+                  : `${n.toFixed(0)}s`;
               }}
             />
             <Tooltip
