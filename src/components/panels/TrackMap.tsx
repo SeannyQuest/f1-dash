@@ -7,6 +7,8 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 
 interface TrackMapProps {
   sessionKey: string | null;
+  circuitKey: string | null;
+  year: string | null;
   isLive: boolean;
   refetchInterval: number | false;
 }
@@ -14,7 +16,13 @@ interface TrackMapProps {
 interface CircuitData {
   x: number[];
   y: number[];
-  corners: { number: number; letter: string; x: number; y: number; angle: number }[];
+  corners: {
+    number: number;
+    letter: string;
+    x: number;
+    y: number;
+    angle: number;
+  }[];
 }
 
 interface Bounds {
@@ -40,9 +48,10 @@ function computeBounds(x: number[], y: number[]): Bounds {
 function transformPoint(
   px: number,
   py: number,
-  bounds: Bounds
+  bounds: Bounds,
 ): { x: number; y: number } {
-  const scale = (VIEW_SIZE - PADDING * 2) / Math.max(bounds.width, bounds.height);
+  const scale =
+    (VIEW_SIZE - PADDING * 2) / Math.max(bounds.width, bounds.height);
   const offsetX = (VIEW_SIZE - bounds.width * scale) / 2;
   const offsetY = (VIEW_SIZE - bounds.height * scale) / 2;
   return {
@@ -51,15 +60,20 @@ function transformPoint(
   };
 }
 
-export function TrackMap({ sessionKey, isLive }: TrackMapProps) {
+export function TrackMap({
+  sessionKey,
+  circuitKey,
+  year,
+  isLive,
+}: TrackMapProps) {
   const { data: drivers } = useDrivers(sessionKey);
   const { locations, connected } = useWebSocket(sessionKey);
   const [circuit, setCircuit] = useState<CircuitData | null>(null);
   const [circuitLoading, setCircuitLoading] = useState(false);
 
-  // Fetch circuit data when session changes
+  // Fetch circuit data when circuit key changes
   useEffect(() => {
-    if (!sessionKey) {
+    if (!circuitKey) {
       setCircuit(null);
       return;
     }
@@ -69,15 +83,9 @@ export function TrackMap({ sessionKey, isLive }: TrackMapProps) {
     async function loadCircuit() {
       setCircuitLoading(true);
       try {
-        // Get session info for circuit_key
-        const sessRes = await fetch(`/api/f1/sessions?session_key_override=${sessionKey}`);
-        const sessions = await sessRes.json();
-        if (cancelled || !Array.isArray(sessions) || sessions.length === 0) return;
-
-        const circuitKey = sessions[0].circuit_key;
-        const year = sessions[0].year;
-
-        const circRes = await fetch(`/api/f1/circuit?circuit_key=${circuitKey}&year=${year}`);
+        const circRes = await fetch(
+          `/api/f1/circuit?circuit_key=${circuitKey}&year=${year || new Date().getFullYear()}`,
+        );
         if (cancelled || !circRes.ok) return;
 
         const data = await circRes.json();
@@ -92,8 +100,10 @@ export function TrackMap({ sessionKey, isLive }: TrackMapProps) {
     }
 
     loadCircuit();
-    return () => { cancelled = true; };
-  }, [sessionKey]);
+    return () => {
+      cancelled = true;
+    };
+  }, [circuitKey, year]);
 
   const bounds = useMemo(() => {
     if (!circuit) return null;
@@ -179,7 +189,10 @@ export function TrackMap({ sessionKey, isLive }: TrackMapProps) {
           <div className="text-white/30 text-sm">No circuit data available</div>
         </div>
       ) : (
-        <svg viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`} className="w-full h-auto">
+        <svg
+          viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
+          className="w-full h-auto"
+        >
           {/* Track surface glow */}
           <path
             d={trackPath}
@@ -254,33 +267,35 @@ export function TrackMap({ sessionKey, isLive }: TrackMapProps) {
           ))}
 
           {/* Start/Finish marker — first point on circuit */}
-          {circuit.x.length > 0 && bounds && (() => {
-            const sf = transformPoint(circuit.x[0], circuit.y[0], bounds);
-            return (
-              <g>
-                <rect
-                  x={sf.x - 12}
-                  y={sf.y - 16}
-                  width={24}
-                  height={10}
-                  rx={2}
-                  fill="rgba(255,255,255,0.1)"
-                />
-                <text
-                  x={sf.x}
-                  y={sf.y - 10}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fill="rgba(255,255,255,0.4)"
-                  fontSize="6"
-                  fontFamily="monospace"
-                  fontWeight="bold"
-                >
-                  S/F
-                </text>
-              </g>
-            );
-          })()}
+          {circuit.x.length > 0 &&
+            bounds &&
+            (() => {
+              const sf = transformPoint(circuit.x[0], circuit.y[0], bounds);
+              return (
+                <g>
+                  <rect
+                    x={sf.x - 12}
+                    y={sf.y - 16}
+                    width={24}
+                    height={10}
+                    rx={2}
+                    fill="rgba(255,255,255,0.1)"
+                  />
+                  <text
+                    x={sf.x}
+                    y={sf.y - 10}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill="rgba(255,255,255,0.4)"
+                    fontSize="6"
+                    fontFamily="monospace"
+                    fontWeight="bold"
+                  >
+                    S/F
+                  </text>
+                </g>
+              );
+            })()}
         </svg>
       )}
     </PanelWrapper>

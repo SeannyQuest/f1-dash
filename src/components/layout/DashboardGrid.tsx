@@ -26,7 +26,7 @@ const PANEL_TOGGLE_LABELS: Record<PanelId, string> = {
 };
 
 function DashboardContent() {
-  const { sessionKey, setSessionKey } = useSessionState();
+  const { sessionKey, circuitKey, year, setSession } = useSessionState();
   const { isLive, intervals } = useLiveMode(sessionKey);
   const { isVisible, togglePanel } = usePanelLayout();
 
@@ -47,7 +47,7 @@ function DashboardContent() {
             >
               {label}
             </button>
-          )
+          ),
         )}
       </div>
 
@@ -55,43 +55,73 @@ function DashboardContent() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 auto-rows-min">
         {isVisible("session-selector") && (
           <div className="md:col-span-2 xl:col-span-3 2xl:col-span-4">
-            <SessionSelector onSessionSelect={setSessionKey} />
+            <SessionSelector onSessionSelect={setSession} />
           </div>
         )}
 
         {isVisible("timing-tower") && (
           <div className="xl:row-span-2">
-            <TimingTower sessionKey={sessionKey} isLive={isLive} refetchInterval={intervals.positions} />
+            <TimingTower
+              sessionKey={sessionKey}
+              isLive={isLive}
+              refetchInterval={intervals.positions}
+            />
           </div>
         )}
 
         {isVisible("track-map") && (
-          <TrackMap sessionKey={sessionKey} isLive={isLive} refetchInterval={intervals.positions} />
+          <TrackMap
+            sessionKey={sessionKey}
+            circuitKey={circuitKey}
+            year={year}
+            isLive={isLive}
+            refetchInterval={intervals.positions}
+          />
         )}
 
         {isVisible("weather") && (
-          <WeatherWidget sessionKey={sessionKey} isLive={isLive} refetchInterval={intervals.weather} />
+          <WeatherWidget
+            sessionKey={sessionKey}
+            isLive={isLive}
+            refetchInterval={intervals.weather}
+          />
         )}
 
         {isVisible("race-control") && (
-          <RaceControlFeed sessionKey={sessionKey} isLive={isLive} refetchInterval={intervals.raceControl} />
+          <RaceControlFeed
+            sessionKey={sessionKey}
+            isLive={isLive}
+            refetchInterval={intervals.raceControl}
+          />
         )}
 
         {isVisible("tire-strategy") && (
           <div className="md:col-span-2">
-            <TireStrategy sessionKey={sessionKey} isLive={isLive} refetchInterval={intervals.stints} />
+            <TireStrategy
+              sessionKey={sessionKey}
+              isLive={isLive}
+              refetchInterval={intervals.stints}
+            />
           </div>
         )}
 
         {isVisible("lap-chart") && (
           <div className="md:col-span-2">
-            <LapTimeChart sessionKey={sessionKey} isLive={isLive} refetchInterval={intervals.laps} />
+            <LapTimeChart
+              sessionKey={sessionKey}
+              isLive={isLive}
+              refetchInterval={intervals.laps}
+            />
           </div>
         )}
 
         {isVisible("driver-comparison") && (
           <div className="md:col-span-2">
-            <DriverComparison sessionKey={sessionKey} isLive={isLive} refetchInterval={intervals.laps} />
+            <DriverComparison
+              sessionKey={sessionKey}
+              isLive={isLive}
+              refetchInterval={intervals.laps}
+            />
           </div>
         )}
       </div>
@@ -101,7 +131,13 @@ function DashboardContent() {
 
 export function DashboardGrid() {
   return (
-    <Suspense fallback={<div className="text-white/40 text-center py-12">Loading dashboard...</div>}>
+    <Suspense
+      fallback={
+        <div className="text-white/40 text-center py-12">
+          Loading dashboard...
+        </div>
+      }
+    >
       <DashboardContent />
     </Suspense>
   );

@@ -5,8 +5,10 @@ import { PanelWrapper } from "@/components/layout/PanelWrapper";
 import { useMeetings, useSessions } from "@/hooks/useOpenF1";
 import { ChevronDown } from "lucide-react";
 
+import type { SessionSelection } from "@/hooks/useSessionState";
+
 interface SessionSelectorProps {
-  onSessionSelect: (sessionKey: string) => void;
+  onSessionSelect: (info: SessionSelection) => void;
 }
 
 export function SessionSelector({ onSessionSelect }: SessionSelectorProps) {
@@ -101,7 +103,13 @@ export function SessionSelector({ onSessionSelect }: SessionSelectorProps) {
           {sessions?.map((s) => (
             <button
               key={s.session_key}
-              onClick={() => onSessionSelect(s.session_key.toString())}
+              onClick={() =>
+                onSessionSelect({
+                  sessionKey: s.session_key.toString(),
+                  circuitKey: s.circuit_key.toString(),
+                  year: s.year.toString(),
+                })
+              }
               className="px-4 py-2 rounded-lg text-sm font-medium bg-white/[0.06] border border-white/[0.1] text-white/80 hover:bg-cyan-primary/20 hover:text-cyan-primary hover:border-cyan-primary/30 transition-colors"
             >
               {s.session_name}
