@@ -11,11 +11,16 @@ interface SessionSelectorProps {
 
 export function SessionSelector({ onSessionSelect }: SessionSelectorProps) {
   const currentYear = new Date().getFullYear();
-  const [year, setYear] = useState(currentYear.toString());
+  const [year, setYear] = useState("2025");
   const [meetingKey, setMeetingKey] = useState<string | null>(null);
 
-  const { data: meetings, isLoading: meetingsLoading } = useMeetings(year);
-  const { data: sessions, isLoading: sessionsLoading } = useSessions(meetingKey);
+  const {
+    data: meetings,
+    isLoading: meetingsLoading,
+    error: meetingsError,
+  } = useMeetings(year);
+  const { data: sessions, isLoading: sessionsLoading } =
+    useSessions(meetingKey);
 
   // Auto-select most recent meeting when year changes
   useEffect(() => {
@@ -24,10 +29,26 @@ export function SessionSelector({ onSessionSelect }: SessionSelectorProps) {
     }
   }, [meetings]);
 
-  const years = Array.from({ length: currentYear - 2022 }, (_, i) => (currentYear - i).toString());
+  const years = Array.from({ length: currentYear - 2022 }, (_, i) =>
+    (currentYear - i).toString(),
+  );
+  // Ensure 2025 is always in the list
+  if (!years.includes("2025")) years.push("2025");
+  years.sort((a, b) => Number(b) - Number(a));
 
   return (
     <PanelWrapper title="Session Selector">
+      {meetingsError && (
+        <div className="mb-3 px-4 py-3 rounded-lg bg-yellow-flag/10 border border-yellow-flag/20 text-sm">
+          <p className="text-yellow-flag font-semibold">
+            API temporarily restricted
+          </p>
+          <p className="text-white/50 text-xs mt-1">
+            OpenF1 locks public access during live F1 sessions. Add an API key
+            in your environment, or try again after the session ends.
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         {/* Year selector */}
         <div className="relative">
@@ -60,7 +81,11 @@ export function SessionSelector({ onSessionSelect }: SessionSelectorProps) {
               {meetingsLoading ? "Loading races..." : "Select a race"}
             </option>
             {meetings?.map((m) => (
-              <option key={m.meeting_key} value={m.meeting_key} className="bg-obsidian-light">
+              <option
+                key={m.meeting_key}
+                value={m.meeting_key}
+                className="bg-obsidian-light"
+              >
                 {m.meeting_name} — {m.country_name}
               </option>
             ))}
@@ -70,7 +95,9 @@ export function SessionSelector({ onSessionSelect }: SessionSelectorProps) {
 
         {/* Session buttons */}
         <div className="flex gap-2">
-          {sessionsLoading && <span className="text-xs text-white/30">Loading sessions...</span>}
+          {sessionsLoading && (
+            <span className="text-xs text-white/30">Loading sessions...</span>
+          )}
           {sessions?.map((s) => (
             <button
               key={s.session_key}
