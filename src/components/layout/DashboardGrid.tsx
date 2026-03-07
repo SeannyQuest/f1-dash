@@ -1,131 +1,126 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useSessionState } from "@/hooks/useSessionState";
 import { useLiveMode } from "@/hooks/useLiveMode";
-import { usePanelLayout } from "@/hooks/usePanelLayout";
-import { SessionSelector } from "@/components/panels/SessionSelector";
+import { LiveTimingProvider } from "@/contexts/LiveTimingContext";
+import { Header } from "@/components/layout/Header";
+import { SessionBar } from "@/components/layout/SessionBar";
 import { TimingTower } from "@/components/panels/TimingTower";
 import { TrackMap } from "@/components/panels/TrackMap";
 import { TireStrategy } from "@/components/panels/TireStrategy";
 import { LapTimeChart } from "@/components/panels/LapTimeChart";
-import { WeatherWidget } from "@/components/panels/WeatherWidget";
 import { RaceControlFeed } from "@/components/panels/RaceControlFeed";
 import { DriverComparison } from "@/components/panels/DriverComparison";
-import type { PanelId } from "@/types";
-
-const PANEL_TOGGLE_LABELS: Record<PanelId, string> = {
-  "session-selector": "Session",
-  "timing-tower": "Timing",
-  "track-map": "Track",
-  "tire-strategy": "Tires",
-  "lap-chart": "Laps",
-  weather: "Weather",
-  "race-control": "Race Ctrl",
-  "driver-comparison": "Compare",
-};
 
 function DashboardContent() {
   const { sessionKey, circuitKey, year, setSession } = useSessionState();
   const { isLive, intervals } = useLiveMode(sessionKey);
-  const { isVisible, togglePanel } = usePanelLayout();
+  const [showCompare, setShowCompare] = useState(false);
 
   return (
-    <div className="space-y-4">
-      {/* Panel toggles */}
-      <div className="flex flex-wrap gap-2">
-        {(Object.entries(PANEL_TOGGLE_LABELS) as [PanelId, string][]).map(
-          ([id, label]) => (
-            <button
-              key={id}
-              onClick={() => togglePanel(id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                isVisible(id)
-                  ? "bg-cyan-primary/20 text-cyan-primary border border-cyan-primary/30"
-                  : "bg-white/[0.04] text-white/40 border border-white/[0.06] hover:text-white/60"
-              }`}
-            >
-              {label}
-            </button>
-          ),
-        )}
-      </div>
+    <LiveTimingProvider enabled={isLive} sessionKey={sessionKey}>
+      <div className="h-screen flex flex-col overflow-hidden">
+        {/* Header with weather strip */}
+        <Header
+          sessionKey={sessionKey}
+          isLive={isLive}
+          weatherRefetchInterval={intervals.weather}
+        />
 
-      {/* Panel grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 auto-rows-min">
-        {isVisible("session-selector") && (
-          <div className="md:col-span-2 xl:col-span-3 2xl:col-span-4">
-            <SessionSelector onSessionSelect={setSession} />
-          </div>
-        )}
+        {/* Collapsible session bar */}
+        <SessionBar
+          onSessionSelect={setSession}
+          hasActiveSession={!!sessionKey}
+        />
 
-        {isVisible("timing-tower") && (
-          <div className="xl:row-span-2">
+        {/* Main broadcast layout */}
+        <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[340px_1fr_360px] gap-[2px] p-[2px] overflow-hidden">
+          {/* Left column: Timing Tower (full height) */}
+          <div className="overflow-hidden xl:flex xl:flex-col min-h-0">
             <TimingTower
               sessionKey={sessionKey}
               isLive={isLive}
               refetchInterval={intervals.positions}
             />
           </div>
-        )}
 
-        {isVisible("track-map") && (
-          <TrackMap
-            sessionKey={sessionKey}
-            circuitKey={circuitKey}
-            year={year}
-            isLive={isLive}
-            refetchInterval={intervals.positions}
-          />
-        )}
+          {/* Center column: Track Map (top) + Tire Strategy (bottom) */}
+          <div className="grid grid-rows-[1fr_auto] gap-[2px] overflow-hidden min-h-0">
+            <div className="overflow-hidden min-h-0">
+              <TrackMap
+                sessionKey={sessionKey}
+                circuitKey={circuitKey}
+                year={year}
+                isLive={isLive}
+                refetchInterval={intervals.positions}
+              />
+            </div>
+            <div className="overflow-hidden max-h-[280px]">
+              <TireStrategy
+                sessionKey={sessionKey}
+                isLive={isLive}
+                refetchInterval={intervals.stints}
+              />
+            </div>
+          </div>
 
-        {isVisible("weather") && (
-          <WeatherWidget
-            sessionKey={sessionKey}
-            isLive={isLive}
-            refetchInterval={intervals.weather}
-          />
-        )}
+          {/* Right column: Lap Chart (top) + Race Control (bottom) */}
+          <div className="grid grid-rows-[1fr_1fr] gap-[2px] overflow-hidden min-h-0">
+            <div className="overflow-hidden min-h-0">
+              <LapTimeChart
+                sessionKey={sessionKey}
+                isLive={isLive}
+                refetchInterval={intervals.laps}
+              />
+            </div>
+            <div className="overflow-hidden min-h-0">
+              <RaceControlFeed
+                sessionKey={sessionKey}
+                isLive={isLive}
+                refetchInterval={intervals.raceControl}
+              />
+            </div>
+          </div>
+        </div>
 
-        {isVisible("race-control") && (
-          <RaceControlFeed
-            sessionKey={sessionKey}
-            isLive={isLive}
-            refetchInterval={intervals.raceControl}
-          />
-        )}
-
-        {isVisible("tire-strategy") && (
-          <div className="md:col-span-2">
-            <TireStrategy
-              sessionKey={sessionKey}
-              isLive={isLive}
-              refetchInterval={intervals.stints}
-            />
+        {/* Driver Comparison overlay */}
+        {showCompare && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+            <div className="w-full max-w-lg animate-[fade-in_0.2s_ease-out]">
+              <DriverComparison
+                sessionKey={sessionKey}
+                isLive={isLive}
+                refetchInterval={intervals.laps}
+              />
+              <button
+                onClick={() => setShowCompare(false)}
+                className="mt-2 w-full py-2 text-xs text-white/40 hover:text-white/60 transition-colors"
+              >
+                Close comparison
+              </button>
+            </div>
           </div>
         )}
 
-        {isVisible("lap-chart") && (
-          <div className="md:col-span-2">
-            <LapTimeChart
-              sessionKey={sessionKey}
-              isLive={isLive}
-              refetchInterval={intervals.laps}
-            />
-          </div>
-        )}
-
-        {isVisible("driver-comparison") && (
-          <div className="md:col-span-2">
-            <DriverComparison
-              sessionKey={sessionKey}
-              isLive={isLive}
-              refetchInterval={intervals.laps}
-            />
-          </div>
+        {/* Floating compare button */}
+        {sessionKey && !showCompare && (
+          <button
+            onClick={() => setShowCompare(true)}
+            className="fixed bottom-4 right-4 z-40 px-4 py-2.5 rounded text-[10px] font-black uppercase tracking-wider text-white/80 transition-all duration-200 hover:scale-105"
+            style={{
+              background:
+                "linear-gradient(135deg, rgba(225, 6, 0, 0.25) 0%, rgba(225, 6, 0, 0.1) 100%)",
+              border: "1px solid rgba(225, 6, 0, 0.4)",
+              boxShadow:
+                "0 2px 12px rgba(225, 6, 0, 0.2), 0 0 20px rgba(225, 6, 0, 0.05)",
+            }}
+          >
+            Compare
+          </button>
         )}
       </div>
-    </div>
+    </LiveTimingProvider>
   );
 }
 
@@ -133,7 +128,7 @@ export function DashboardGrid() {
   return (
     <Suspense
       fallback={
-        <div className="text-white/40 text-center py-12">
+        <div className="h-screen flex items-center justify-center text-white/30 text-sm">
           Loading dashboard...
         </div>
       }

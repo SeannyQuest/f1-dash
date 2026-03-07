@@ -13,7 +13,11 @@ interface TireStrategyProps {
   refetchInterval: number | false;
 }
 
-export function TireStrategy({ sessionKey, isLive, refetchInterval }: TireStrategyProps) {
+export function TireStrategy({
+  sessionKey,
+  isLive,
+  refetchInterval,
+}: TireStrategyProps) {
   const { data: stints } = useStints(sessionKey, refetchInterval);
   const { data: drivers } = useDrivers(sessionKey);
   const { data: positions } = usePositions(sessionKey);
@@ -56,45 +60,64 @@ export function TireStrategy({ sessionKey, isLive, refetchInterval }: TireStrate
 
   if (!sessionKey) {
     return (
-      <PanelWrapper title="Tire Strategy" isLive={isLive}>
-        <p className="text-white/30 text-sm">Select a session</p>
+      <PanelWrapper title="Strategy" isLive={isLive} className="h-full">
+        <p className="text-white/20 text-xs">Select a session</p>
       </PanelWrapper>
     );
   }
 
   return (
-    <PanelWrapper title="Tire Strategy" isLive={isLive}>
-      <div className="space-y-1.5">
+    <PanelWrapper title="Strategy" isLive={isLive} className="h-full">
+      <div className="space-y-1">
         {strategyRows.length === 0 && (
-          <p className="text-white/30 text-sm text-center py-4">Loading stint data...</p>
+          <p className="text-white/20 text-[10px] text-center py-3">
+            Loading stint data...
+          </p>
         )}
         {strategyRows.map((row) => (
-          <div key={row.driver!.driver_number} className="flex items-center gap-3">
-            <div className="w-16 shrink-0">
-              <DriverTag acronym={row.driver!.name_acronym} teamColour={row.driver!.team_colour} />
+          <div
+            key={row.driver!.driver_number}
+            className="flex items-center gap-2"
+          >
+            <div className="w-12 shrink-0">
+              <DriverTag
+                acronym={row.driver!.name_acronym}
+                teamColour={row.driver!.team_colour}
+              />
             </div>
-            <div className="flex-1 flex h-7 gap-px rounded overflow-hidden">
-              {row.stints.map((stint) => {
-                const width = row.maxLap > 0
-                  ? ((stint.lap_end - stint.lap_start + 1) / row.maxLap) * 100
-                  : 0;
-                const color = TIRE_COLORS[stint.compound] ?? TIRE_COLORS.UNKNOWN;
+            <div className="flex-1 flex h-8 gap-[1px] rounded-sm overflow-hidden">
+              {row.stints.map((stint, stintIdx) => {
+                const width =
+                  row.maxLap > 0
+                    ? ((stint.lap_end - stint.lap_start + 1) / row.maxLap) * 100
+                    : 0;
+                const color =
+                  TIRE_COLORS[stint.compound] ?? TIRE_COLORS.UNKNOWN;
+                const lapCount = stint.lap_end - stint.lap_start + 1;
                 return (
                   <div
                     key={stint.stint_number}
-                    className="flex items-center justify-center text-[10px] font-mono font-bold transition-all"
+                    className="flex items-center justify-center text-[9px] font-mono font-bold relative"
                     style={{
                       width: `${width}%`,
-                      backgroundColor: `${color}33`,
-                      borderBottom: `2px solid ${color}`,
-                      color: stint.compound === "HARD" ? "rgba(255,255,255,0.7)" : color,
+                      background: `linear-gradient(180deg, ${color}20 0%, ${color}35 100%)`,
+                      borderBottom: `3px solid ${color}`,
+                      boxShadow: `inset 0 0 12px ${color}10`,
+                      color:
+                        stint.compound === "HARD"
+                          ? "rgba(255,255,255,0.7)"
+                          : color,
                     }}
-                    title={`${stint.compound} | Laps ${stint.lap_start}-${stint.lap_end} (${stint.lap_end - stint.lap_start + 1} laps)`}
+                    title={`${stint.compound} | Laps ${stint.lap_start}-${stint.lap_end} (${lapCount} laps)`}
                   >
-                    {stint.lap_end - stint.lap_start + 1 > 3 && (
-                      <span className="flex items-center gap-1">
-                        <TireIcon compound={stint.compound} size="sm" />
-                        <span>{stint.lap_end - stint.lap_start + 1}</span>
+                    {/* Pit stop marker */}
+                    {stintIdx > 0 && (
+                      <div className="absolute left-0 top-0 bottom-0 w-px border-l border-dashed border-white/20" />
+                    )}
+                    {lapCount > 3 && (
+                      <span className="flex items-center gap-0.5">
+                        <TireIcon compound={stint.compound} size="xs" />
+                        <span>{lapCount}</span>
                       </span>
                     )}
                   </div>

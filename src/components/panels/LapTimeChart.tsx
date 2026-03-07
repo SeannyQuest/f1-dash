@@ -62,16 +62,16 @@ export function LapTimeChart({
 
   if (!sessionKey) {
     return (
-      <PanelWrapper title="Lap Times" isLive={isLive}>
-        <p className="text-white/30 text-sm">Select a session</p>
+      <PanelWrapper title="Lap Times" isLive={isLive} className="h-full">
+        <p className="text-white/20 text-xs">Select a session</p>
       </PanelWrapper>
     );
   }
 
   return (
-    <PanelWrapper title="Lap Times" isLive={isLive}>
-      {/* Driver selector */}
-      <div className="flex flex-wrap gap-1.5 mb-4">
+    <PanelWrapper title="Lap Times" isLive={isLive} className="h-full">
+      {/* Driver chip selector */}
+      <div className="flex flex-wrap gap-1 mb-3">
         {drivers?.map((d) => {
           const isSelected = selectedDrivers.includes(d.driver_number);
           const color = d.team_colour.startsWith("#")
@@ -81,14 +81,14 @@ export function LapTimeChart({
             <button
               key={d.driver_number}
               onClick={() => toggleDriver(d.driver_number)}
-              className={`px-2 py-1 rounded text-xs font-mono font-semibold transition-colors border ${
+              className={`px-1.5 py-0.5 rounded-sm text-[10px] font-mono font-bold transition-colors border ${
                 isSelected
                   ? "border-transparent text-white"
-                  : "border-white/[0.08] text-white/40 hover:text-white/60"
+                  : "border-white/[0.06] text-white/25 hover:text-white/45"
               }`}
               style={
                 isSelected
-                  ? { backgroundColor: `${color}40`, borderColor: color }
+                  ? { backgroundColor: `${color}35`, borderColor: `${color}60` }
                   : {}
               }
             >
@@ -97,38 +97,38 @@ export function LapTimeChart({
           );
         })}
         {selectedDrivers.length >= 4 && (
-          <span className="text-xs text-white/30 self-center ml-2">
-            Max 4 drivers
+          <span className="text-[9px] text-white/20 self-center ml-1">
+            Max 4
           </span>
         )}
       </div>
 
       {/* Chart */}
       {selectedDrivers.length === 0 ? (
-        <p className="text-white/30 text-sm text-center py-8">
-          Select up to 4 drivers to compare lap times
+        <p className="text-white/15 text-[10px] text-center py-6">
+          Select drivers to compare lap times
         </p>
       ) : (
-        <ResponsiveContainer width="100%" height={300}>
+        <ResponsiveContainer width="100%" height="80%">
           <LineChart data={chartData}>
             <CartesianGrid
               strokeDasharray="3 3"
-              stroke="rgba(255,255,255,0.06)"
+              stroke="rgba(255,255,255,0.04)"
             />
             <XAxis
               dataKey="lap"
-              stroke="rgba(255,255,255,0.3)"
-              tick={{ fontSize: 11 }}
+              stroke="rgba(255,255,255,0.15)"
+              tick={{ fontSize: 9, fill: "rgba(255,255,255,0.3)" }}
               label={{
                 value: "Lap",
                 position: "insideBottom",
                 offset: -5,
-                style: { fill: "rgba(255,255,255,0.3)" },
+                style: { fill: "rgba(255,255,255,0.2)", fontSize: 9 },
               }}
             />
             <YAxis
-              stroke="rgba(255,255,255,0.3)"
-              tick={{ fontSize: 11 }}
+              stroke="rgba(255,255,255,0.15)"
+              tick={{ fontSize: 9, fill: "rgba(255,255,255,0.3)" }}
               domain={["auto", "auto"]}
               tickFormatter={(v) => {
                 const n = Number(v);
@@ -138,13 +138,15 @@ export function LapTimeChart({
                   ? `${mins}:${secs.padStart(2, "0")}`
                   : `${n.toFixed(0)}s`;
               }}
+              width={40}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "rgb(18, 18, 24)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 8,
-                fontSize: 12,
+                backgroundColor: "rgb(20, 22, 32)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 2,
+                fontSize: 10,
+                padding: "6px 8px",
               }}
               labelFormatter={(label) => `Lap ${label}`}
               formatter={(value) => {
@@ -171,7 +173,7 @@ export function LapTimeChart({
                   type="monotone"
                   dataKey={`d_${driverNum}`}
                   stroke={color}
-                  strokeWidth={2}
+                  strokeWidth={1.5}
                   dot={false}
                   name={driver?.name_acronym ?? String(driverNum)}
                   connectNulls

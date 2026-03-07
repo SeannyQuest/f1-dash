@@ -48,3 +48,27 @@ export const POLL_INTERVALS = {
   stints: 10000,
   drivers: 60000,
 } as const;
+
+export const SECTOR_COLORS: Record<string, string> = {
+  personalBest: "#00e664",
+  overallBest: "#b45aff",
+  slower: "#ffdc00",
+  noData: "#222233",
+};
+
+export const POSITION_TINTS: Record<number, string> = {
+  1: "rgba(255,215,0,0.10)",
+  2: "rgba(192,192,192,0.07)",
+  3: "rgba(205,127,50,0.07)",
+};
+
+export const RACE_CONTROL_CATEGORIES: Record<
+  string,
+  { color: string; label: string }
+> = {
+  Flag: { color: "#ffd000", label: "FLAG" },
+  SafetyCar: { color: "#ff8c00", label: "SC" },
+  Drs: { color: "#00d25a", label: "DRS" },
+  CarEvent: { color: "#3b82f6", label: "CAR" },
+  Other: { color: "#666", label: "INFO" },
+};

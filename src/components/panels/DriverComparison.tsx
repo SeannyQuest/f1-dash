@@ -87,17 +87,17 @@ function DeltaCell({
   b: number | null;
   lowerIsBetter?: boolean;
 }) {
-  if (a === null || b === null) return <span className="text-white/30">—</span>;
+  if (a === null || b === null) return <span className="text-white/15">—</span>;
   const delta = a - b;
   const isBetter = lowerIsBetter ? delta < 0 : delta > 0;
   const color =
     Math.abs(delta) < 0.001
-      ? "text-white/50"
+      ? "text-white/30"
       : isBetter
-        ? "text-green-flag"
+        ? "text-sector-green"
         : "text-red-flag";
   return (
-    <span className={`font-mono text-xs ${color}`}>
+    <span className={`font-mono text-[10px] ${color}`}>
       {delta > 0 ? "+" : ""}
       {Number(delta).toFixed(3)}
     </span>
@@ -129,8 +129,8 @@ export function DriverComparison({
 
   if (!sessionKey) {
     return (
-      <PanelWrapper title="Driver Comparison" isLive={isLive}>
-        <p className="text-white/30 text-sm">Select a session</p>
+      <PanelWrapper title="Compare" isLive={isLive}>
+        <p className="text-white/20 text-xs">Select a session</p>
       </PanelWrapper>
     );
   }
@@ -194,9 +194,9 @@ export function DriverComparison({
   ];
 
   return (
-    <PanelWrapper title="Driver Comparison" isLive={isLive}>
+    <PanelWrapper title="Compare" isLive={isLive}>
       {/* Driver selectors */}
-      <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-2 gap-3 mb-3">
         {[
           { value: driverA, setter: setDriverA, label: "Driver A" },
           { value: driverB, setter: setDriverB, label: "Driver B" },
@@ -207,32 +207,32 @@ export function DriverComparison({
               onChange={(e) =>
                 setter(e.target.value ? Number(e.target.value) : null)
               }
-              className="appearance-none w-full bg-white/[0.06] border border-white/[0.1] rounded-lg px-3 py-2 pr-8 text-sm text-white focus:outline-none focus:border-cyan-primary/50 cursor-pointer"
+              className="appearance-none w-full bg-white/[0.06] border border-white/[0.08] rounded-sm px-3 py-1.5 pr-7 text-xs text-white focus:outline-none focus:border-accent/50 cursor-pointer"
             >
-              <option value="" className="bg-obsidian-light">
+              <option value="" className="bg-bg-panel">
                 {label}
               </option>
               {drivers?.map((d) => (
                 <option
                   key={d.driver_number}
                   value={d.driver_number}
-                  className="bg-obsidian-light"
+                  className="bg-bg-panel"
                 >
                   {d.name_acronym} — {d.team_name}
                 </option>
               ))}
             </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30 pointer-events-none" />
           </div>
         ))}
       </div>
 
       {/* Comparison table */}
       {driverA && driverB ? (
-        <table className="w-full text-sm">
+        <table className="w-full text-[11px]">
           <thead>
-            <tr className="text-white/40 text-xs uppercase tracking-wider border-b border-white/[0.06]">
-              <th className="text-left py-2">
+            <tr className="text-white/30 text-[10px] uppercase tracking-wider border-b border-white/[0.08]">
+              <th className="text-left py-1.5">
                 {driverAData && (
                   <DriverTag
                     acronym={driverAData.name_acronym}
@@ -240,8 +240,8 @@ export function DriverComparison({
                   />
                 )}
               </th>
-              <th className="text-center py-2">Metric</th>
-              <th className="text-right py-2">
+              <th className="text-center py-1.5 text-white/20">vs</th>
+              <th className="text-right py-1.5">
                 {driverBData && (
                   <DriverTag
                     acronym={driverBData.name_acronym}
@@ -252,11 +252,18 @@ export function DriverComparison({
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.label} className="border-b border-white/[0.03]">
-                <td className="py-2 font-mono text-white/80">
+            {rows.map((row, i) => (
+              <tr
+                key={row.label}
+                className="border-b border-white/[0.03]"
+                style={{
+                  backgroundColor:
+                    i % 2 === 1 ? "rgba(255,255,255,0.015)" : "transparent",
+                }}
+              >
+                <td className="py-1.5 font-mono text-white/70">
                   {row.format(row.valA)}
-                  <span className="ml-2">
+                  <span className="ml-1.5">
                     <DeltaCell
                       a={row.valA}
                       b={row.valB}
@@ -264,11 +271,11 @@ export function DriverComparison({
                     />
                   </span>
                 </td>
-                <td className="py-2 text-center text-xs text-white/50">
+                <td className="py-1.5 text-center text-[10px] text-white/30">
                   {row.label}
                 </td>
-                <td className="py-2 text-right font-mono text-white/80">
-                  <span className="mr-2">
+                <td className="py-1.5 text-right font-mono text-white/70">
+                  <span className="mr-1.5">
                     <DeltaCell
                       a={row.valB}
                       b={row.valA}
@@ -282,7 +289,7 @@ export function DriverComparison({
           </tbody>
         </table>
       ) : (
-        <p className="text-white/30 text-sm text-center py-8">
+        <p className="text-white/20 text-[10px] text-center py-6">
           Select two drivers to compare
         </p>
       )}

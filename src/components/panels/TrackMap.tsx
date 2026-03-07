@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PanelWrapper } from "@/components/layout/PanelWrapper";
 import { useDrivers } from "@/hooks/useOpenF1";
 import { useWebSocket } from "@/hooks/useWebSocket";
+import { useLiveTiming } from "@/contexts/LiveTimingContext";
 
 interface TrackMapProps {
   sessionKey: string | null;
@@ -67,7 +68,14 @@ export function TrackMap({
   isLive,
 }: TrackMapProps) {
   const { data: drivers } = useDrivers(sessionKey);
-  const { locations, connected } = useWebSocket(sessionKey);
+  const { locations: wsLocations, connected } = useWebSocket(sessionKey);
+  const liveTiming = useLiveTiming();
+
+  // Prefer SignalR positions when live and connected, fall back to Railway WS relay
+  const locations =
+    liveTiming.connected && liveTiming.trackPositions.length > 0
+      ? liveTiming.trackPositions
+      : wsLocations;
   const [circuit, setCircuit] = useState<CircuitData | null>(null);
   const [circuitLoading, setCircuitLoading] = useState(false);
 
@@ -153,83 +161,81 @@ export function TrackMap({
     });
   }, [circuit, bounds]);
 
+  const carCount = locations.length;
+
   if (!sessionKey) {
     return (
-      <PanelWrapper title="Track Map" isLive={isLive}>
-        <p className="text-white/30 text-sm">Select a session</p>
+      <PanelWrapper title="Track" isLive={isLive} className="h-full">
+        <p className="text-white/20 text-xs">Select a session</p>
       </PanelWrapper>
     );
   }
 
   return (
-    <PanelWrapper title="Track Map" isLive={isLive}>
-      {/* Connection status */}
-      <div className="flex items-center gap-2 mb-2">
-        <div
-          className={`w-2 h-2 rounded-full ${
-            connected ? "bg-green-400 animate-pulse" : "bg-red-400"
-          }`}
-        />
-        <span className="text-[10px] text-white/40 uppercase tracking-wider">
-          {connected ? "Live" : "Connecting..."}
-        </span>
-        {locations.length > 0 && (
-          <span className="text-[10px] text-white/30 ml-auto">
-            {locations.length} cars
+    <PanelWrapper
+      title="Track"
+      isLive={isLive}
+      className="h-full"
+      rightSection={
+        carCount > 0 ? (
+          <span className="text-[10px] font-mono text-white/25">
+            {carCount} cars
           </span>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
       {circuitLoading ? (
-        <div className="flex items-center justify-center h-48">
-          <div className="text-white/30 text-sm">Loading circuit...</div>
+        <div className="flex items-center justify-center h-full">
+          <div className="text-white/20 text-xs">Loading circuit...</div>
         </div>
       ) : !circuit ? (
-        <div className="flex items-center justify-center h-48">
-          <div className="text-white/30 text-sm">No circuit data available</div>
+        <div className="flex items-center justify-center h-full">
+          <div className="text-white/20 text-xs">No circuit data</div>
         </div>
       ) : (
         <svg
           viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
-          className="w-full h-auto"
+          className="w-full h-full max-h-full object-contain"
+          preserveAspectRatio="xMidYMid meet"
         >
           {/* Track surface glow */}
           <path
             d={trackPath}
             fill="none"
-            stroke="rgba(255,255,255,0.03)"
-            strokeWidth="28"
+            stroke="rgba(255,215,0,0.06)"
+            strokeWidth="32"
             strokeLinejoin="round"
           />
-          {/* Track outline */}
+          {/* Track outline — yellow/gold like F1 TV */}
           <path
             d={trackPath}
             fill="none"
-            stroke="rgba(255,255,255,0.12)"
-            strokeWidth="18"
+            stroke="rgba(255,215,0,0.45)"
+            strokeWidth="22"
             strokeLinejoin="round"
           />
           {/* Track center line */}
           <path
             d={trackPath}
             fill="none"
-            stroke="rgba(255,255,255,0.04)"
+            stroke="rgba(15,17,26,0.6)"
             strokeWidth="1"
-            strokeDasharray="4 4"
+            strokeDasharray="6 4"
           />
 
           {/* Corner numbers */}
           {corners.map((c) => (
             <g key={`corner-${c.number}`}>
-              <circle cx={c.x} cy={c.y} r={8} fill="rgba(255,255,255,0.06)" />
+              <circle cx={c.x} cy={c.y} r={9} fill="rgba(255,255,255,0.07)" />
               <text
                 x={c.x}
                 y={c.y + 1}
                 textAnchor="middle"
                 dominantBaseline="central"
-                fill="rgba(255,255,255,0.25)"
+                fill="rgba(255,255,255,0.35)"
                 fontSize="7"
                 fontFamily="monospace"
+                fontWeight="600"
               >
                 {c.number}
               </text>
@@ -240,14 +246,16 @@ export function TrackMap({
           {driverDots.map((dot) => (
             <g key={dot.key}>
               {/* Outer glow */}
-              <circle cx={dot.x} cy={dot.y} r={16} fill={`${dot.color}18`} />
+              <circle cx={dot.x} cy={dot.y} r={18} fill={`${dot.color}20`} />
+              {/* Drop shadow */}
+              <circle cx={dot.x} cy={dot.y + 1} r={11} fill="rgba(0,0,0,0.4)" />
               {/* Car dot */}
               <circle
                 cx={dot.x}
                 cy={dot.y}
-                r={9}
+                r={11}
                 fill={dot.color}
-                stroke="rgba(0,0,0,0.6)"
+                stroke="rgba(0,0,0,0.7)"
                 strokeWidth={1.5}
               />
               {/* Driver abbreviation */}
@@ -257,37 +265,41 @@ export function TrackMap({
                 textAnchor="middle"
                 dominantBaseline="central"
                 fill="white"
-                fontSize="6.5"
+                fontSize="7"
                 fontWeight="bold"
                 fontFamily="monospace"
+                style={{ textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}
               >
                 {dot.acronym}
               </text>
             </g>
           ))}
 
-          {/* Start/Finish marker — first point on circuit */}
+          {/* Start/Finish marker */}
           {circuit.x.length > 0 &&
             bounds &&
             (() => {
               const sf = transformPoint(circuit.x[0], circuit.y[0], bounds);
               return (
                 <g>
+                  {/* Checkered pattern hint */}
                   <rect
-                    x={sf.x - 12}
-                    y={sf.y - 16}
-                    width={24}
-                    height={10}
+                    x={sf.x - 14}
+                    y={sf.y - 18}
+                    width={28}
+                    height={11}
                     rx={2}
-                    fill="rgba(255,255,255,0.1)"
+                    fill="rgba(255,255,255,0.12)"
+                    stroke="rgba(255,255,255,0.2)"
+                    strokeWidth={0.5}
                   />
                   <text
                     x={sf.x}
-                    y={sf.y - 10}
+                    y={sf.y - 11.5}
                     textAnchor="middle"
                     dominantBaseline="central"
-                    fill="rgba(255,255,255,0.4)"
-                    fontSize="6"
+                    fill="rgba(255,255,255,0.5)"
+                    fontSize="7"
                     fontFamily="monospace"
                     fontWeight="bold"
                   >

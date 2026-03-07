@@ -32,3 +32,14 @@ export function formatInterval(interval: number | string | null): string {
   if (n === 0) return "—";
   return `+${n.toFixed(3)}`;
 }
+
+export function classifySectorTime(
+  current: number | null,
+  personalBest: number | null,
+  overallBest: number | null,
+): "overallBest" | "personalBest" | "slower" | "noData" {
+  if (current === null) return "noData";
+  if (overallBest !== null && current <= overallBest) return "overallBest";
+  if (personalBest !== null && current <= personalBest) return "personalBest";
+  return "slower";
+}

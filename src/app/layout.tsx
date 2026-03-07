@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
-import { Outfit, JetBrains_Mono } from "next/font/google";
+import { Titillium_Web, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const outfit = Outfit({ subsets: ["latin"], variable: "--font-sans" });
+const titillium = Titillium_Web({
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+  variable: "--font-sans",
+});
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
@@ -21,8 +25,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${outfit.variable} ${jetbrainsMono.variable}`}>
-      <body className="bg-obsidian text-white font-sans antialiased min-h-screen">
+    <html lang="en" className={`${titillium.variable} ${jetbrainsMono.variable}`}>
+      <body className="bg-bg-primary text-white font-sans antialiased min-h-screen">
         <Providers>{children}</Providers>
       </body>
     </html>
