@@ -5,6 +5,7 @@ import { PanelWrapper } from "@/components/layout/PanelWrapper";
 import { useDrivers } from "@/hooks/useF1Data";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useLiveTiming } from "@/contexts/LiveTimingContext";
+import { useReplay } from "@/contexts/ReplayContext";
 
 interface TrackMapProps {
   sessionKey: string | null;
@@ -70,12 +71,16 @@ export function TrackMap({
   const { data: drivers } = useDrivers(sessionKey);
   const { locations: wsLocations, connected } = useWebSocket(sessionKey);
   const liveTiming = useLiveTiming();
+  const replay = useReplay();
 
-  // Prefer SignalR positions when live and connected, fall back to Railway WS relay
+  // Priority: Replay positions → SignalR → Railway WS relay
+  const replayActive = replay != null && replay.status !== "idle";
   const locations =
-    liveTiming.connected && liveTiming.trackPositions.length > 0
-      ? liveTiming.trackPositions
-      : wsLocations;
+    replayActive && replay.trackPositions.length > 0
+      ? replay.trackPositions
+      : liveTiming.connected && liveTiming.trackPositions.length > 0
+        ? liveTiming.trackPositions
+        : wsLocations;
   const [circuit, setCircuit] = useState<CircuitData | null>(null);
   const [circuitLoading, setCircuitLoading] = useState(false);
 

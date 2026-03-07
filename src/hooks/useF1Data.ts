@@ -2,11 +2,11 @@
 
 /**
  * Unified F1 data hooks.
- * When live timing is connected and has data, use SignalR relay.
- * Otherwise fall back to OpenF1 REST API via React Query.
+ * Priority: Replay (if active) → Live SignalR → OpenF1 REST API.
  */
 
 import { useLiveTiming } from "@/contexts/LiveTimingContext";
+import { useReplay } from "@/contexts/ReplayContext";
 import {
   useDrivers as useDriversRest,
   usePositions as usePositionsRest,
@@ -31,11 +31,16 @@ import type {
 // Re-export unchanged hooks
 export { useMeetings, useSessions };
 
-function useLiveOrRest<T>(
+function useReplayOrLiveOrRest<T>(
+  replayData: T | null | undefined,
+  replayActive: boolean,
   liveData: T | null,
   restResult: { data: T | undefined },
 ): { data: T | undefined } {
   const live = useLiveTiming();
+  if (replayActive && replayData != null) {
+    return { data: replayData as T };
+  }
   if (live.connected && liveData !== null) {
     return { data: liveData };
   }
@@ -47,11 +52,18 @@ export function useDrivers(
   refetchInterval?: number | false,
 ): { data: Driver[] | undefined } {
   const live = useLiveTiming();
+  const replay = useReplay();
+  const replayActive = replay != null && replay.status !== "idle";
   const rest = useDriversRest(
-    live.connected && live.drivers ? null : sessionKey,
+    replayActive || (live.connected && live.drivers) ? null : sessionKey,
     refetchInterval,
   );
-  return useLiveOrRest(live.drivers, rest);
+  return useReplayOrLiveOrRest(
+    replay?.drivers,
+    replayActive,
+    live.drivers,
+    rest,
+  );
 }
 
 export function usePositions(
@@ -59,11 +71,18 @@ export function usePositions(
   refetchInterval?: number | false,
 ): { data: Position[] | undefined } {
   const live = useLiveTiming();
+  const replay = useReplay();
+  const replayActive = replay != null && replay.status !== "idle";
   const rest = usePositionsRest(
-    live.connected && live.positions ? null : sessionKey,
+    replayActive || (live.connected && live.positions) ? null : sessionKey,
     refetchInterval,
   );
-  return useLiveOrRest(live.positions, rest);
+  return useReplayOrLiveOrRest(
+    replay?.positions,
+    replayActive,
+    live.positions,
+    rest,
+  );
 }
 
 export function useLaps(
@@ -72,12 +91,14 @@ export function useLaps(
   refetchInterval?: number | false,
 ): { data: Lap[] | undefined } {
   const live = useLiveTiming();
+  const replay = useReplay();
+  const replayActive = replay != null && replay.status !== "idle";
   const rest = useLapsRest(
-    live.connected && live.laps ? null : sessionKey,
+    replayActive || (live.connected && live.laps) ? null : sessionKey,
     driverNumber,
     refetchInterval,
   );
-  return useLiveOrRest(live.laps, rest);
+  return useReplayOrLiveOrRest(replay?.laps, replayActive, live.laps, rest);
 }
 
 export function useIntervals(
@@ -85,11 +106,18 @@ export function useIntervals(
   refetchInterval?: number | false,
 ): { data: Interval[] | undefined } {
   const live = useLiveTiming();
+  const replay = useReplay();
+  const replayActive = replay != null && replay.status !== "idle";
   const rest = useIntervalsRest(
-    live.connected && live.intervals ? null : sessionKey,
+    replayActive || (live.connected && live.intervals) ? null : sessionKey,
     refetchInterval,
   );
-  return useLiveOrRest(live.intervals, rest);
+  return useReplayOrLiveOrRest(
+    replay?.intervals,
+    replayActive,
+    live.intervals,
+    rest,
+  );
 }
 
 export function useStints(
@@ -97,11 +125,13 @@ export function useStints(
   refetchInterval?: number | false,
 ): { data: Stint[] | undefined } {
   const live = useLiveTiming();
+  const replay = useReplay();
+  const replayActive = replay != null && replay.status !== "idle";
   const rest = useStintsRest(
-    live.connected && live.stints ? null : sessionKey,
+    replayActive || (live.connected && live.stints) ? null : sessionKey,
     refetchInterval,
   );
-  return useLiveOrRest(live.stints, rest);
+  return useReplayOrLiveOrRest(replay?.stints, replayActive, live.stints, rest);
 }
 
 export function useWeather(
@@ -109,11 +139,18 @@ export function useWeather(
   refetchInterval?: number | false,
 ): { data: Weather[] | undefined } {
   const live = useLiveTiming();
+  const replay = useReplay();
+  const replayActive = replay != null && replay.status !== "idle";
   const rest = useWeatherRest(
-    live.connected && live.weather ? null : sessionKey,
+    replayActive || (live.connected && live.weather) ? null : sessionKey,
     refetchInterval,
   );
-  return useLiveOrRest(live.weather, rest);
+  return useReplayOrLiveOrRest(
+    replay?.weather,
+    replayActive,
+    live.weather,
+    rest,
+  );
 }
 
 export function useRaceControl(
@@ -121,9 +158,16 @@ export function useRaceControl(
   refetchInterval?: number | false,
 ): { data: RaceControlMessage[] | undefined } {
   const live = useLiveTiming();
+  const replay = useReplay();
+  const replayActive = replay != null && replay.status !== "idle";
   const rest = useRaceControlRest(
-    live.connected && live.raceControl ? null : sessionKey,
+    replayActive || (live.connected && live.raceControl) ? null : sessionKey,
     refetchInterval,
   );
-  return useLiveOrRest(live.raceControl, rest);
+  return useReplayOrLiveOrRest(
+    replay?.raceControl,
+    replayActive,
+    live.raceControl,
+    rest,
+  );
 }

@@ -1,10 +1,22 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useMeetings, useSessions } from "@/hooks/useOpenF1";
 import { useLiveTiming } from "@/contexts/LiveTimingContext";
+import { useReplay } from "@/contexts/ReplayContext";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import type { SessionSelection } from "@/hooks/useSessionState";
+import type { ReplaySessionInfo } from "@/lib/replay-engine";
+
+interface ReplaySessionMeta {
+  sessionKey: number;
+  sessionName: string;
+  path: string;
+  meetingKey: number;
+  meetingName: string;
+  circuitKey: number;
+  year: number;
+}
 
 interface SessionBarProps {
   onSessionSelect: (info: SessionSelection) => void;
@@ -30,8 +42,27 @@ export function SessionBar({
   const [meetingKey, setMeetingKey] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const liveTiming = useLiveTiming();
+  const replay = useReplay();
 
-  // Relay is live if connected and has driver data + session info
+  // Replay archive sessions (fetched from F1 static index)
+  const [replaySessions, setReplaySessions] = useState<ReplaySessionMeta[]>([]);
+
+  // Fetch replay-available sessions when year changes
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/f1/replay-sessions?year=${year}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.sessions) {
+          setReplaySessions(data.sessions);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [year]);
+
   const hasLiveSession =
     liveTiming.connected &&
     liveTiming.drivers !== null &&
@@ -56,6 +87,37 @@ export function SessionBar({
   );
   if (!years.includes("2025")) years.push("2025");
   years.sort((a, b) => Number(b) - Number(a));
+
+  // Find the replay archive path for a given session key
+  const findReplaySession = useCallback(
+    (sessionKey: number): ReplaySessionMeta | undefined => {
+      return replaySessions.find((r) => r.sessionKey === sessionKey);
+    },
+    [replaySessions],
+  );
+
+  const startReplay = useCallback(
+    (meta: ReplaySessionMeta) => {
+      if (!replay) return;
+      const info: ReplaySessionInfo = {
+        path: meta.path,
+        sessionKey: meta.sessionKey,
+        meetingName: meta.meetingName,
+        sessionName: meta.sessionName,
+        circuitKey: meta.circuitKey,
+        year: meta.year,
+      };
+      // Set the session in the URL so circuit data loads
+      onSessionSelect({
+        sessionKey: String(meta.sessionKey),
+        circuitKey: String(meta.circuitKey),
+        year: String(meta.year),
+      });
+      replay.load(info);
+      setCollapsed(true);
+    },
+    [replay, onSessionSelect],
+  );
 
   if (collapsed && hasActiveSession) {
     return (
@@ -169,47 +231,60 @@ export function SessionBar({
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-white/30 pointer-events-none" />
         </div>
 
-        {/* Session pills */}
+        {/* Session pills — each has a click for static view and a replay button */}
         <div className="flex gap-1.5">
           {sessionsLoading && (
             <span className="text-[10px] text-white/20">Loading...</span>
           )}
           {sessions?.map((s) => {
             const abbrev = SESSION_ABBREVS[s.session_name] || s.session_name;
+            const replayMeta = findReplaySession(s.session_key);
             return (
-              <button
-                key={s.session_key}
-                onClick={() => {
-                  onSessionSelect({
-                    sessionKey: s.session_key.toString(),
-                    circuitKey: s.circuit_key.toString(),
-                    year: s.year.toString(),
-                  });
-                  setCollapsed(true);
-                }}
-                className="px-3 py-1.5 rounded text-xs font-bold border transition-all duration-200 hover:scale-105"
-                style={{
-                  background:
-                    "linear-gradient(180deg, rgba(225, 6, 0, 0.15) 0%, rgba(225, 6, 0, 0.05) 100%)",
-                  borderColor: "rgba(225, 6, 0, 0.3)",
-                  color: "rgba(255, 255, 255, 0.8)",
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background =
-                    "linear-gradient(180deg, rgba(225, 6, 0, 0.35) 0%, rgba(225, 6, 0, 0.15) 100%)";
-                  e.currentTarget.style.borderColor = "rgba(225, 6, 0, 0.6)";
-                  e.currentTarget.style.boxShadow =
-                    "0 0 12px rgba(225, 6, 0, 0.3)";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background =
-                    "linear-gradient(180deg, rgba(225, 6, 0, 0.15) 0%, rgba(225, 6, 0, 0.05) 100%)";
-                  e.currentTarget.style.borderColor = "rgba(225, 6, 0, 0.3)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                {abbrev}
-              </button>
+              <div key={s.session_key} className="flex items-center">
+                <button
+                  onClick={() => {
+                    onSessionSelect({
+                      sessionKey: s.session_key.toString(),
+                      circuitKey: s.circuit_key.toString(),
+                      year: s.year.toString(),
+                    });
+                    setCollapsed(true);
+                  }}
+                  className="px-3 py-1.5 rounded-l text-xs font-bold border transition-all duration-200 hover:scale-105"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, rgba(225, 6, 0, 0.15) 0%, rgba(225, 6, 0, 0.05) 100%)",
+                    borderColor: "rgba(225, 6, 0, 0.3)",
+                    color: "rgba(255, 255, 255, 0.8)",
+                    borderRight: replayMeta ? "none" : undefined,
+                    borderRadius: replayMeta ? "4px 0 0 4px" : "4px",
+                  }}
+                >
+                  {abbrev}
+                </button>
+                {replayMeta && (
+                  <button
+                    onClick={() => startReplay(replayMeta)}
+                    title={`Replay ${s.session_name}`}
+                    className="px-1.5 py-1.5 rounded-r border border-l-0 transition-all duration-200 hover:scale-105 group"
+                    style={{
+                      background:
+                        "linear-gradient(180deg, rgba(245, 158, 11, 0.15) 0%, rgba(245, 158, 11, 0.05) 100%)",
+                      borderColor: "rgba(245, 158, 11, 0.3)",
+                    }}
+                  >
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 10 10"
+                      className="text-amber-500/70 group-hover:text-amber-400"
+                      fill="currentColor"
+                    >
+                      <polygon points="2,0 10,5 2,10" />
+                    </svg>
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>

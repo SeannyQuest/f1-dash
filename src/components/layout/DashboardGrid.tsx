@@ -4,8 +4,10 @@ import { Suspense, useState } from "react";
 import { useSessionState } from "@/hooks/useSessionState";
 import { useLiveTiming } from "@/contexts/LiveTimingContext";
 import { LiveTimingProvider } from "@/contexts/LiveTimingContext";
+import { ReplayProvider, useReplay } from "@/contexts/ReplayContext";
 import { Header } from "@/components/layout/Header";
 import { SessionBar } from "@/components/layout/SessionBar";
+import { ReplayBar } from "@/components/layout/ReplayBar";
 import { TimingTower } from "@/components/panels/TimingTower";
 import { TrackMap } from "@/components/panels/TrackMap";
 import { TireStrategy } from "@/components/panels/TireStrategy";
@@ -16,22 +18,27 @@ import { DriverComparison } from "@/components/panels/DriverComparison";
 function DashboardInner() {
   const { sessionKey, circuitKey, year, setSession } = useSessionState();
   const liveTiming = useLiveTiming();
+  const replay = useReplay();
   const [showCompare, setShowCompare] = useState(false);
 
   // Live if the relay is connected and has driver data
   const isLive = liveTiming.connected && liveTiming.drivers !== null;
+  // Replay mode is active if replay has loaded data
+  const isReplay = replay != null && replay.status !== "idle";
 
-  // Build session label from live info or URL params
+  // Build session label from live info, replay info, or URL params
   const sessionLabel =
-    isLive && liveTiming.liveSessionInfo.meetingName
-      ? `${liveTiming.liveSessionInfo.meetingName}${liveTiming.liveSessionInfo.sessionName ? ` · ${liveTiming.liveSessionInfo.sessionName}` : ""}`
-      : undefined;
+    isReplay && replay.sessionInfo
+      ? `${replay.sessionInfo.meetingName} · ${replay.sessionInfo.sessionName}`
+      : isLive && liveTiming.liveSessionInfo.meetingName
+        ? `${liveTiming.liveSessionInfo.meetingName}${liveTiming.liveSessionInfo.sessionName ? ` · ${liveTiming.liveSessionInfo.sessionName}` : ""}`
+        : undefined;
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">
       <Header
         sessionKey={sessionKey}
-        isLive={isLive}
+        isLive={isLive || isReplay}
         weatherRefetchInterval={false}
         sessionLabel={sessionLabel}
       />
@@ -40,6 +47,8 @@ function DashboardInner() {
         onSessionSelect={setSession}
         hasActiveSession={!!sessionKey}
       />
+
+      <ReplayBar />
 
       <div className="flex-1 min-h-0 grid grid-cols-1 xl:grid-cols-[340px_1fr_360px] gap-[2px] p-[2px] overflow-hidden">
         <div className="overflow-hidden xl:flex xl:flex-col min-h-0">
@@ -128,9 +137,10 @@ function DashboardContent() {
   const { sessionKey } = useSessionState();
 
   return (
-    // Always try to connect to the relay — it'll just have no data for historical sessions
     <LiveTimingProvider enabled={true} sessionKey={sessionKey}>
-      <DashboardInner />
+      <ReplayProvider>
+        <DashboardInner />
+      </ReplayProvider>
     </LiveTimingProvider>
   );
 }
