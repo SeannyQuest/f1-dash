@@ -1,4 +1,42 @@
 const BASE_URL = "https://api.openf1.org/v1";
+const TOKEN_URL = "https://api.openf1.org/token";
+
+let cachedToken: { token: string; expiresAt: number } | null = null;
+
+async function getAccessToken(): Promise<string | null> {
+  const username = process.env.OPENF1_USERNAME;
+  const password = process.env.OPENF1_PASSWORD;
+  if (!username || !password) return null;
+
+  // Return cached token if still valid (with 5 min buffer)
+  if (cachedToken && Date.now() < cachedToken.expiresAt - 300_000) {
+    return cachedToken.token;
+  }
+
+  const res = await fetch(TOKEN_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ username, password }).toString(),
+  });
+
+  if (!res.ok) {
+    console.error(`OpenF1 token error: ${res.status}`);
+    return null;
+  }
+
+  const data = (await res.json()) as {
+    access_token: string;
+    expires_in: string;
+    token_type: string;
+  };
+
+  cachedToken = {
+    token: data.access_token,
+    expiresAt: Date.now() + parseInt(data.expires_in, 10) * 1000,
+  };
+
+  return cachedToken.token;
+}
 
 export async function fetchOpenF1<T>(
   endpoint: string,
@@ -11,9 +49,9 @@ export async function fetchOpenF1<T>(
   });
 
   const headers: Record<string, string> = {};
-  const apiKey = process.env.OPENF1_API_KEY;
-  if (apiKey) {
-    headers["Authorization"] = `Bearer ${apiKey}`;
+  const token = await getAccessToken();
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
   }
 
   const res = await fetch(url.toString(), {
