@@ -16,6 +16,7 @@ import type {
   Stint,
   Weather,
   RaceControlMessage,
+  CarData,
 } from "@/types";
 import type { DriverLocation } from "@/hooks/useWebSocket";
 
@@ -37,6 +38,7 @@ export interface F1LiveState {
   Position: RawPositionData | null;
   CarData: RawCarData | null;
   WeatherData: Record<string, string>;
+  WeatherDataSeries?: Record<string, unknown>;
   TrackStatus: Record<string, string>;
   DriverList: Record<string, RawDriver>;
   RaceControlMessages: {
@@ -45,10 +47,74 @@ export interface F1LiveState {
   };
   SessionInfo: Record<string, unknown>;
   SessionData: Record<string, unknown>;
+  /** Session state machine: "Inactive" | "Started" | "Aborted" | "Finished" | "Finalised" | "Ends" */
+  SessionStatus?: { Status?: string; [key: string]: unknown };
   ExtrapolatedClock: Record<string, unknown>;
   LapCount: { CurrentLap?: number; TotalLaps?: number };
   TopThree: Record<string, unknown>;
   TeamRadio: Record<string, unknown>;
+  /** Pit stop durations, per driver (race only). {"<num>":{RacingNumber, Duration, Lap}} */
+  PitLaneTimeCollection?: {
+    PitTimes?: Record<
+      string,
+      { RacingNumber?: string; Duration?: string; Lap?: string }
+    >;
+    [key: string]: unknown;
+  };
+  /** Predicted championship standings (race only). */
+  ChampionshipPrediction?: {
+    Drivers?: Record<
+      string,
+      {
+        RacingNumber?: string;
+        CurrentPosition?: number;
+        PredictedPosition?: number;
+        CurrentPoints?: number;
+        PredictedPoints?: number;
+      }
+    >;
+    Teams?: Record<
+      string,
+      {
+        TeamName?: string;
+        CurrentPosition?: number;
+        PredictedPosition?: number;
+        CurrentPoints?: number;
+        PredictedPoints?: number;
+      }
+    >;
+    [key: string]: unknown;
+  };
+  /** Per-driver race-specific info: overtake state, pit stops, intervals. */
+  DriverRaceInfo?: Record<
+    string,
+    {
+      IntervalToPositionAhead?: string;
+      Gap?: string;
+      OvertakeState?: number;
+      IsOut?: boolean;
+      Position?: string;
+      PitStops?: number;
+    }
+  >;
+  /** Stint series (history of stints per driver). */
+  TyreStintSeries?: {
+    Stints?: Record<
+      string,
+      Array<{
+        Compound?: string;
+        New?: string;
+        TotalLaps?: number;
+        StartLaps?: number;
+      }>
+    >;
+    [key: string]: unknown;
+  };
+  /** Currently fitted tyres per driver. */
+  CurrentTyres?: {
+    Tyres?: Record<string, { Compound?: string; New?: string }>;
+    [key: string]: unknown;
+  };
   Heartbeat: unknown;
   _lastUpdate: number;
 }
@@ -386,6 +452,153 @@ export function adaptRaceControl(
   }
 
   return messages;
+}
+
+export interface PitStop {
+  driver_number: number;
+  lap: number;
+  duration_sec: number;
+}
+
+export interface TeamRadioCapture {
+  driver_number: number;
+  date: string;
+  /**
+   * Path is relative to the session archive root on F1's CDN,
+   * e.g. "TeamRadio/HAMILT01_44_20260308_140523.mp3".
+   * The frontend constructs the absolute URL based on the session.
+   */
+  path: string;
+}
+
+/**
+ * Flatten TeamRadio.Captures into a typed array.
+ * F1 sends:
+ *   { Captures: [{ Utc, RacingNumber, Path }] }
+ * or (occasionally, as deltas) keyed by capture id:
+ *   { Captures: { "0": {...}, "1": {...} } }
+ */
+export function adaptTeamRadio(state: F1LiveState): TeamRadioCapture[] {
+  const raw = state.TeamRadio as { Captures?: unknown } | undefined;
+  if (!raw?.Captures) return [];
+
+  let caps: Array<Record<string, unknown>>;
+  if (Array.isArray(raw.Captures)) {
+    caps = raw.Captures as Array<Record<string, unknown>>;
+  } else if (typeof raw.Captures === "object" && raw.Captures !== null) {
+    caps = Object.values(raw.Captures as Record<string, unknown>).filter(
+      (v): v is Record<string, unknown> => typeof v === "object" && v !== null,
+    );
+  } else {
+    return [];
+  }
+
+  const results: TeamRadioCapture[] = [];
+  for (const c of caps) {
+    const num = c.RacingNumber;
+    const utc = c.Utc;
+    const path = c.Path;
+    if (
+      typeof num !== "string" ||
+      typeof utc !== "string" ||
+      typeof path !== "string"
+    )
+      continue;
+    const driverNum = parseInt(num, 10);
+    if (Number.isNaN(driverNum)) continue;
+    results.push({ driver_number: driverNum, date: utc, path });
+  }
+  // Newest first
+  results.sort((a, b) => (a.date < b.date ? 1 : -1));
+  return results;
+}
+
+/**
+ * Flatten PitLaneTimeCollection into a PitStop[].
+ * Only populated during Race sessions.
+ */
+export function adaptPitStops(state: F1LiveState): PitStop[] {
+  const pitTimes = state.PitLaneTimeCollection?.PitTimes;
+  if (!pitTimes) return [];
+
+  const results: PitStop[] = [];
+  for (const [num, entry] of Object.entries(pitTimes)) {
+    const driverNum = parseInt(num, 10);
+    if (Number.isNaN(driverNum)) continue;
+    const duration = entry.Duration ? parseFloat(entry.Duration) : NaN;
+    const lap = entry.Lap ? parseInt(entry.Lap, 10) : NaN;
+    if (Number.isNaN(duration) || Number.isNaN(lap)) continue;
+    results.push({
+      driver_number: driverNum,
+      lap,
+      duration_sec: duration,
+    });
+  }
+  return results;
+}
+
+/** "Inactive" | "Started" | "Aborted" | "Finished" | "Finalised" | "Ends" | null */
+export function adaptSessionStatus(state: F1LiveState): string | null {
+  return state.SessionStatus?.Status ?? null;
+}
+
+/**
+ * Decode CarData.z entries into a flat CarData[] — one entry per driver,
+ * using the latest frame in the current buffer.
+ *
+ * SignalR channel map (confirmed from FastF1 + race_bot decoder + OpenF1):
+ *   "0"  → RPM
+ *   "2"  → Speed (km/h)
+ *   "3"  → nGear (0–8)
+ *   "4"  → Throttle (0–100)
+ *   "5"  → Brake (0 or 100, effectively boolean)
+ *   "45" → DRS (enum: 0=off, 8=available, 10/12/14=on)
+ *
+ * Raw decompressed shape from relay:
+ *   { Entries: [{ Utc, Cars: { "<num>": { Channels: { "0":rpm, ... } } } }, ...] }
+ *
+ * We use the last entry in the buffer since SignalR batches several
+ * timestamps per frame at ~3.7 Hz; taking the latest gives the freshest
+ * per-driver snapshot for panels to render.
+ */
+export function adaptCarData(
+  state: F1LiveState,
+  sessionKey: number,
+): CarData[] {
+  if (!state.CarData) return [];
+
+  // CarData may arrive as {Entries:[...]} or (rarely) as a bare array
+  let entries: RawCarData["Entries"] | undefined;
+  if (Array.isArray(state.CarData)) {
+    entries = state.CarData as RawCarData["Entries"];
+  } else if (state.CarData && typeof state.CarData === "object") {
+    entries = (state.CarData as RawCarData).Entries;
+  }
+
+  if (!entries || entries.length === 0) return [];
+
+  const latest = entries[entries.length - 1];
+  if (!latest?.Cars) return [];
+
+  const results: CarData[] = [];
+  const date = latest.Utc ?? new Date().toISOString();
+
+  for (const [num, car] of Object.entries(latest.Cars)) {
+    const ch = car?.Channels ?? {};
+    results.push({
+      driver_number: parseInt(num, 10),
+      rpm: ch["0"] ?? 0,
+      speed: ch["2"] ?? 0,
+      n_gear: ch["3"] ?? 0,
+      throttle: ch["4"] ?? 0,
+      brake: ch["5"] ?? 0,
+      drs: ch["45"] ?? 0,
+      date,
+      session_key: sessionKey,
+    });
+  }
+
+  return results;
 }
 
 export function adaptTrackPositions(state: F1LiveState): DriverLocation[] {

@@ -26,7 +26,9 @@ import type {
   Stint,
   Weather,
   RaceControlMessage,
+  CarData,
 } from "@/types";
+import type { TeamRadioCapture } from "@/lib/live-timing-adapter";
 
 // Re-export unchanged hooks
 export { useMeetings, useSessions };
@@ -151,6 +153,53 @@ export function useWeather(
     live.weather,
     rest,
   );
+}
+
+/**
+ * Live CarData telemetry (throttle, brake, DRS, gear, RPM, speed).
+ * Only available from live SignalR or replay — no REST fallback, since
+ * OpenF1's car_data endpoint is prohibitively large for live UI use.
+ */
+export function useCarData(): { data: CarData[] | undefined } {
+  const live = useLiveTiming();
+  const replay = useReplay();
+  const replayActive = replay != null && replay.status !== "idle";
+  if (replayActive && replay.carData != null) {
+    return { data: replay.carData };
+  }
+  if (live.connected && live.carData !== null) {
+    return { data: live.carData };
+  }
+  return { data: undefined };
+}
+
+/**
+ * Team radio captures (Utc, driver, mp3 path).
+ * SignalR only — no REST/OpenF1 equivalent.
+ */
+export function useTeamRadio(): {
+  data: TeamRadioCapture[] | undefined;
+  basePath: string | null;
+} {
+  const live = useLiveTiming();
+  const replay = useReplay();
+  const replayActive = replay != null && replay.status !== "idle";
+  if (replayActive && replay.teamRadio != null) {
+    return {
+      data: replay.teamRadio,
+      basePath: replay.sessionInfo?.path ?? null,
+    };
+  }
+  if (live.connected && live.teamRadio !== null) {
+    // For live, we don't have a CDN path — construct a session-relative path
+    // from live session info if available. The relay's SessionInfo.Path field
+    // is the same shape F1 uses in its static archive.
+    const sessionPath =
+      (live.rawState?.SessionInfo as { Path?: string } | undefined)?.Path ??
+      null;
+    return { data: live.teamRadio, basePath: sessionPath };
+  }
+  return { data: undefined, basePath: null };
 }
 
 export function useRaceControl(

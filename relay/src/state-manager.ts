@@ -11,15 +11,22 @@ export interface F1State {
   CarData: unknown;
   Position: unknown;
   WeatherData: Record<string, unknown>;
+  WeatherDataSeries: Record<string, unknown>;
   TrackStatus: Record<string, unknown>;
   DriverList: Record<string, unknown>;
   RaceControlMessages: Record<string, unknown>;
   SessionInfo: Record<string, unknown>;
   SessionData: Record<string, unknown>;
+  SessionStatus: Record<string, unknown>;
   ExtrapolatedClock: Record<string, unknown>;
   LapCount: Record<string, unknown>;
   TopThree: Record<string, unknown>;
   TeamRadio: Record<string, unknown>;
+  PitLaneTimeCollection: Record<string, unknown>;
+  ChampionshipPrediction: Record<string, unknown>;
+  DriverRaceInfo: Record<string, unknown>;
+  TyreStintSeries: Record<string, unknown>;
+  CurrentTyres: Record<string, unknown>;
   Heartbeat: unknown;
   _lastUpdate: number;
 }
@@ -58,15 +65,22 @@ export class StateManager {
     CarData: null,
     Position: null,
     WeatherData: {},
+    WeatherDataSeries: {},
     TrackStatus: {},
     DriverList: {},
     RaceControlMessages: {},
     SessionInfo: {},
     SessionData: {},
+    SessionStatus: {},
     ExtrapolatedClock: {},
     LapCount: {},
     TopThree: {},
     TeamRadio: {},
+    PitLaneTimeCollection: {},
+    ChampionshipPrediction: {},
+    DriverRaceInfo: {},
+    TyreStintSeries: {},
+    CurrentTyres: {},
     Heartbeat: null,
     _lastUpdate: 0,
   };
@@ -112,15 +126,22 @@ export class StateManager {
       CarData: null,
       Position: null,
       WeatherData: {},
+      WeatherDataSeries: {},
       TrackStatus: {},
       DriverList: {},
       RaceControlMessages: {},
       SessionInfo: {},
       SessionData: {},
+      SessionStatus: {},
       ExtrapolatedClock: {},
       LapCount: {},
       TopThree: {},
       TeamRadio: {},
+      PitLaneTimeCollection: {},
+      ChampionshipPrediction: {},
+      DriverRaceInfo: {},
+      TyreStintSeries: {},
+      CurrentTyres: {},
       Heartbeat: null,
       _lastUpdate: 0,
     };

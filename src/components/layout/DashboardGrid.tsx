@@ -5,6 +5,7 @@ import { useSessionState } from "@/hooks/useSessionState";
 import { useLiveTiming } from "@/contexts/LiveTimingContext";
 import { LiveTimingProvider } from "@/contexts/LiveTimingContext";
 import { ReplayProvider, useReplay } from "@/contexts/ReplayContext";
+import { SimulationProvider } from "@/contexts/SimulationContext";
 import { Header } from "@/components/layout/Header";
 import { SessionBar } from "@/components/layout/SessionBar";
 import { ReplayBar } from "@/components/layout/ReplayBar";
@@ -14,12 +15,18 @@ import { TireStrategy } from "@/components/panels/TireStrategy";
 import { LapTimeChart } from "@/components/panels/LapTimeChart";
 import { RaceControlFeed } from "@/components/panels/RaceControlFeed";
 import { DriverComparison } from "@/components/panels/DriverComparison";
+import { TelemetryPanel } from "@/components/panels/TelemetryPanel";
+import { RadioFeed } from "@/components/panels/RadioFeed";
+import { ForkButton } from "@/components/simulation/ForkButton";
+import { ScenarioPickerModal } from "@/components/simulation/ScenarioPickerModal";
+import { SimulationComparison } from "@/components/simulation/SimulationComparison";
 
 function DashboardInner() {
   const { sessionKey, circuitKey, year, setSession } = useSessionState();
   const liveTiming = useLiveTiming();
   const replay = useReplay();
   const [showCompare, setShowCompare] = useState(false);
+  const [showScenarioModal, setShowScenarioModal] = useState(false);
 
   // Live if the relay is connected and has driver data
   const isLive = liveTiming.connected && liveTiming.drivers !== null;
@@ -59,7 +66,7 @@ function DashboardInner() {
           />
         </div>
 
-        <div className="grid grid-rows-[1fr_auto] gap-[2px] overflow-hidden min-h-0">
+        <div className="grid grid-rows-[1fr_auto_auto] gap-[2px] overflow-hidden min-h-0">
           <div className="overflow-hidden min-h-0">
             <TrackMap
               sessionKey={sessionKey}
@@ -69,8 +76,15 @@ function DashboardInner() {
               refetchInterval={false}
             />
           </div>
-          <div className="overflow-hidden max-h-[280px]">
+          <div className="overflow-hidden max-h-[220px]">
             <TireStrategy
+              sessionKey={sessionKey}
+              isLive={isLive}
+              refetchInterval={false}
+            />
+          </div>
+          <div className="overflow-hidden max-h-[200px]">
+            <RadioFeed
               sessionKey={sessionKey}
               isLive={isLive}
               refetchInterval={false}
@@ -78,9 +92,16 @@ function DashboardInner() {
           </div>
         </div>
 
-        <div className="grid grid-rows-[1fr_1fr] gap-[2px] overflow-hidden min-h-0">
+        <div className="grid grid-rows-[1fr_1fr_1fr] gap-[2px] overflow-hidden min-h-0">
           <div className="overflow-hidden min-h-0">
             <LapTimeChart
+              sessionKey={sessionKey}
+              isLive={isLive}
+              refetchInterval={false}
+            />
+          </div>
+          <div className="overflow-hidden min-h-0">
+            <TelemetryPanel
               sessionKey={sessionKey}
               isLive={isLive}
               refetchInterval={false}
@@ -115,20 +136,29 @@ function DashboardInner() {
       )}
 
       {sessionKey && !showCompare && (
-        <button
-          onClick={() => setShowCompare(true)}
-          className="fixed bottom-4 right-4 z-40 px-4 py-2.5 rounded text-[10px] font-black uppercase tracking-wider text-white/80 transition-all duration-200 hover:scale-105"
-          style={{
-            background:
-              "linear-gradient(135deg, rgba(225, 6, 0, 0.25) 0%, rgba(225, 6, 0, 0.1) 100%)",
-            border: "1px solid rgba(225, 6, 0, 0.4)",
-            boxShadow:
-              "0 2px 12px rgba(225, 6, 0, 0.2), 0 0 20px rgba(225, 6, 0, 0.05)",
-          }}
-        >
-          Compare
-        </button>
+        <div className="fixed bottom-4 right-4 z-40 flex items-center gap-2">
+          <ForkButton onOpenModal={() => setShowScenarioModal(true)} />
+          <button
+            onClick={() => setShowCompare(true)}
+            className="px-4 py-2.5 rounded text-[10px] font-black uppercase tracking-wider text-white/80 transition-all duration-200 hover:scale-105"
+            style={{
+              background:
+                "linear-gradient(135deg, rgba(225, 6, 0, 0.25) 0%, rgba(225, 6, 0, 0.1) 100%)",
+              border: "1px solid rgba(225, 6, 0, 0.4)",
+              boxShadow:
+                "0 2px 12px rgba(225, 6, 0, 0.2), 0 0 20px rgba(225, 6, 0, 0.05)",
+            }}
+          >
+            Compare
+          </button>
+        </div>
       )}
+
+      <ScenarioPickerModal
+        open={showScenarioModal}
+        onClose={() => setShowScenarioModal(false)}
+      />
+      <SimulationComparison />
     </div>
   );
 }
@@ -139,7 +169,9 @@ function DashboardContent() {
   return (
     <LiveTimingProvider enabled={true} sessionKey={sessionKey}>
       <ReplayProvider>
-        <DashboardInner />
+        <SimulationProvider>
+          <DashboardInner />
+        </SimulationProvider>
       </ReplayProvider>
     </LiveTimingProvider>
   );

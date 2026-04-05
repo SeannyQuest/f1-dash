@@ -23,6 +23,8 @@ export interface ReplaySessionInfo {
   sessionName: string;
   circuitKey: number;
   year: number;
+  /** "cdn" = F1 static archive (default), "local" = on-disk recording. */
+  source?: "cdn" | "local";
 }
 
 interface TimelineEntry {
@@ -181,6 +183,13 @@ const TOPICS_TO_FETCH = [
   "LapCount",
   "TopThree",
   "TeamRadio",
+  // Added in Gap #4
+  "SessionStatus",
+  "PitLaneTimeCollection",
+  "ChampionshipPrediction",
+  "DriverRaceInfo",
+  "TyreStintSeries",
+  "CurrentTyres",
 ];
 
 const COMPRESSED_TOPICS = ["Position.z", "CarData.z"];
@@ -223,6 +232,8 @@ export class ReplayEngine {
   private lastTickTime: number = 0;
   /** Index of the next timeline entry to apply */
   private timelineIndex: number = 0;
+  /** Source of the currently loaded session — determines which proxy route to call. */
+  private source: "cdn" | "local" = "cdn";
 
   subscribe(listener: ReplayListener): () => void {
     this.listeners.add(listener);
@@ -248,6 +259,7 @@ export class ReplayEngine {
   /** Load a session's archived data */
   async load(session: ReplaySessionInfo): Promise<void> {
     this.stop();
+    this.source = session.source ?? "cdn";
     this.updateState({
       status: "loading",
       sessionInfo: session,
@@ -343,7 +355,17 @@ export class ReplayEngine {
 
   private async fetchArchive(path: string): Promise<string | null> {
     try {
-      const res = await fetch(`/api/f1/replay?path=${encodeURIComponent(path)}`);
+      let url: string;
+      if (this.source === "local") {
+        // `path` for local is "{recordingId}/{filename}" — split on the last slash.
+        const lastSlash = path.lastIndexOf("/");
+        const id = path.slice(0, lastSlash);
+        const file = path.slice(lastSlash + 1);
+        url = `/api/f1/local-recordings?id=${encodeURIComponent(id)}&file=${encodeURIComponent(file)}`;
+      } else {
+        url = `/api/f1/replay?path=${encodeURIComponent(path)}`;
+      }
+      const res = await fetch(url);
       if (!res.ok) return null;
       return await res.text();
     } catch {
@@ -355,10 +377,7 @@ export class ReplayEngine {
     const key = topic as keyof F1LiveState;
     if (key === "_lastUpdate") return;
 
-    if (
-      isPlainObject(data) &&
-      isPlainObject(state[key] as unknown)
-    ) {
+    if (isPlainObject(data) && isPlainObject(state[key] as unknown)) {
       deepMerge(
         state[key] as Record<string, unknown>,
         data as Record<string, unknown>,
@@ -417,10 +436,7 @@ export class ReplayEngine {
       cancelAnimationFrame(this.animationFrame);
       this.animationFrame = null;
     }
-    if (
-      this.state.status === "playing" ||
-      this.state.status === "paused"
-    ) {
+    if (this.state.status === "playing" || this.state.status === "paused") {
       this.updateState({ status: "ready", currentTime: 0 });
     }
   }
@@ -433,7 +449,11 @@ export class ReplayEngine {
     this.updateState({
       currentTime: clampedTime,
       f1State: cloneState(f1State),
-      status: wasPlaying ? "playing" : this.state.status === "idle" ? "ready" : this.state.status,
+      status: wasPlaying
+        ? "playing"
+        : this.state.status === "idle"
+          ? "ready"
+          : this.state.status,
     });
 
     if (wasPlaying) {

@@ -1,16 +1,19 @@
 import { F1SignalRClient } from "./signalr-client.js";
 import { StateManager } from "./state-manager.js";
 import { BroadcastServer } from "./ws-server.js";
+import { Recorder } from "./recorder.js";
 
 const WS_PORT = parseInt(process.env.PORT || "8080", 10);
 const BROADCAST_INTERVAL = parseInt(
   process.env.BROADCAST_INTERVAL || "1000",
   10,
 );
+const RECORDING_ENABLED = process.env.F1_DASH_RECORD !== "0";
 
 console.log("=== F1 Live Timing Relay ===");
 console.log(`WebSocket port: ${WS_PORT}`);
 console.log(`Broadcast interval: ${BROADCAST_INTERVAL}ms`);
+console.log(`Recording: ${RECORDING_ENABLED ? "enabled" : "disabled"}`);
 
 // State accumulator
 const stateManager = new StateManager();
@@ -20,6 +23,9 @@ const signalr = new F1SignalRClient();
 
 // WebSocket server (broadcasts to browsers)
 const broadcast = new BroadcastServer(WS_PORT, stateManager);
+
+// Recorder — tees every inbound SignalR message to disk in F1-CDN format
+const recorder = RECORDING_ENABLED ? new Recorder() : null;
 
 // Wire up: SignalR data → state manager
 signalr.on("data", (topic: string, data: unknown) => {
@@ -32,6 +38,16 @@ signalr.on("data", (topic: string, data: unknown) => {
   }
   stateManager.update(topic, data);
 });
+
+// Wire up: SignalR raw (pre-decompression) → recorder
+if (recorder) {
+  signalr.on("raw", (topic: string, payload: unknown) => {
+    recorder.tap(topic, payload, "delta");
+  });
+  signalr.on("keyframes", (snapshot: Record<string, unknown>) => {
+    recorder.captureKeyframes(snapshot);
+  });
+}
 
 signalr.on("connected", () => {
   console.log("[Main] Connected to F1 SignalR feed");
@@ -68,16 +84,17 @@ setInterval(() => {
 }, 30_000);
 
 // Graceful shutdown
-process.on("SIGTERM", () => {
-  console.log("[Main] SIGTERM received, shutting down...");
+async function shutdown(signal: string): Promise<void> {
+  console.log(`[Main] ${signal} received, shutting down...`);
+  try {
+    await recorder?.stop("complete");
+  } catch (err) {
+    console.error("[Main] Recorder stop failed:", (err as Error).message);
+  }
   signalr.disconnect();
   broadcast.close();
   process.exit(0);
-});
+}
 
-process.on("SIGINT", () => {
-  console.log("[Main] SIGINT received, shutting down...");
-  signalr.disconnect();
-  broadcast.close();
-  process.exit(0);
-});
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));

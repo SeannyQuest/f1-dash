@@ -18,6 +18,7 @@ import type {
   Stint,
   Weather,
   RaceControlMessage,
+  CarData,
 } from "@/types";
 import type { DriverLocation } from "@/hooks/useWebSocket";
 import {
@@ -29,7 +30,13 @@ import {
   adaptWeather,
   adaptRaceControl,
   adaptTrackPositions,
+  adaptCarData,
+  adaptPitStops,
+  adaptSessionStatus,
+  adaptTeamRadio,
   type F1LiveState,
+  type PitStop,
+  type TeamRadioCapture,
 } from "@/lib/live-timing-adapter";
 
 const RELAY_URL =
@@ -52,10 +59,14 @@ interface LiveTimingData {
   stints: Stint[] | null;
   weather: Weather[] | null;
   raceControl: RaceControlMessage[] | null;
+  carData: CarData[] | null;
+  pitStops: PitStop[] | null;
+  teamRadio: TeamRadioCapture[] | null;
   trackPositions: DriverLocation[];
   // Live state metadata
   lapCount: { current: number; total: number } | null;
   trackStatus: string | null;
+  sessionStatus: string | null;
   sessionClock: string | null;
   // Session info from relay (for auto-selecting live session)
   liveSessionInfo: LiveSessionInfo;
@@ -75,9 +86,13 @@ const LiveTimingContext = createContext<LiveTimingData>({
   stints: null,
   weather: null,
   raceControl: null,
+  carData: null,
+  pitStops: null,
+  teamRadio: null,
   trackPositions: [],
   lapCount: null,
   trackStatus: null,
+  sessionStatus: null,
   sessionClock: null,
   liveSessionInfo: {
     sessionKey: null,
@@ -187,9 +202,13 @@ export function LiveTimingProvider({
         stints: null,
         weather: null,
         raceControl: null,
+        carData: null,
+        pitStops: null,
+        teamRadio: null,
         trackPositions: [],
         lapCount: null,
         trackStatus: null,
+        sessionStatus: null,
         sessionClock: null,
         liveSessionInfo: noSession,
         connected: relayStatus === "connected",
@@ -224,6 +243,9 @@ export function LiveTimingProvider({
       stints: adaptStints(rawState, sessionKeyNum),
       weather: adaptWeather(rawState, sessionKeyNum),
       raceControl: adaptRaceControl(rawState, sessionKeyNum),
+      carData: adaptCarData(rawState, sessionKeyNum),
+      pitStops: adaptPitStops(rawState),
+      teamRadio: adaptTeamRadio(rawState),
       trackPositions: adaptTrackPositions(rawState),
       lapCount:
         lapCount?.CurrentLap != null
@@ -233,6 +255,7 @@ export function LiveTimingProvider({
             }
           : null,
       trackStatus: (trackStatus?.Status as string) ?? null,
+      sessionStatus: adaptSessionStatus(rawState),
       sessionClock: (clock?.Remaining as string) ?? null,
       liveSessionInfo,
       connected: relayStatus === "connected",

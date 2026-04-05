@@ -22,6 +22,14 @@ const TOPICS = [
   "LapCount",
   "TimingData",
   "TeamRadio",
+  // Added in Gap #4 audit — previously dropped from subscribe list
+  "SessionStatus",
+  "PitLaneTimeCollection",
+  "ChampionshipPrediction",
+  "DriverRaceInfo",
+  "TyreStintSeries",
+  "CurrentTyres",
+  "WeatherDataSeries",
 ];
 
 interface NegotiateResponse {
@@ -126,9 +134,7 @@ export class F1SignalRClient extends EventEmitter {
 
     const data = (await res.json()) as NegotiateResponse;
     this.connectionToken = data.ConnectionToken;
-    console.log(
-      `[SignalR] Negotiated. ConnectionId: ${data.ConnectionId}`
-    );
+    console.log(`[SignalR] Negotiated. ConnectionId: ${data.ConnectionId}`);
   }
 
   /**
@@ -194,7 +200,7 @@ export class F1SignalRClient extends EventEmitter {
 
       this.ws.on("close", (code, reason) => {
         console.log(
-          `[SignalR] WebSocket closed: ${code} ${reason.toString()} (after ${this.messageCount} messages)`
+          `[SignalR] WebSocket closed: ${code} ${reason.toString()} (after ${this.messageCount} messages)`,
         );
         this._connected = false;
         this.emit("disconnected");
@@ -249,7 +255,11 @@ export class F1SignalRClient extends EventEmitter {
         // The R field contains the initial state snapshot
         if (msg.R && typeof msg.R === "object") {
           const entries = Object.entries(msg.R);
-          console.log(`[SignalR] Initial snapshot has ${entries.length} topics`);
+          console.log(
+            `[SignalR] Initial snapshot has ${entries.length} topics`,
+          );
+          // Emit the raw snapshot for recording before decompression.
+          this.emit("keyframes", msg.R as Record<string, unknown>);
           for (const [topic, data] of entries) {
             const decompressed = topic.endsWith(".z")
               ? decompressZlib(data as string)
@@ -268,6 +278,9 @@ export class F1SignalRClient extends EventEmitter {
           if (m.M === "feed" && m.A.length >= 2) {
             const topic = m.A[0] as string;
             const rawData = m.A[1];
+
+            // Emit raw (pre-decompression) for recording.
+            this.emit("raw", topic, rawData);
 
             const decompressed = topic.endsWith(".z")
               ? decompressZlib(rawData as string)

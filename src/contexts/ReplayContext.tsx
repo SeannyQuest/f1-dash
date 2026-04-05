@@ -23,6 +23,7 @@ import type {
   Stint,
   Weather,
   RaceControlMessage,
+  CarData,
 } from "@/types";
 import type { DriverLocation } from "@/hooks/useWebSocket";
 import {
@@ -34,6 +35,12 @@ import {
   adaptWeather,
   adaptRaceControl,
   adaptTrackPositions,
+  adaptCarData,
+  adaptPitStops,
+  adaptSessionStatus,
+  adaptTeamRadio,
+  type PitStop,
+  type TeamRadioCapture,
 } from "@/lib/live-timing-adapter";
 
 // ── Context shape ──
@@ -55,9 +62,13 @@ interface ReplayContextData {
   stints: Stint[] | null;
   weather: Weather[] | null;
   raceControl: RaceControlMessage[] | null;
+  carData: CarData[] | null;
+  pitStops: PitStop[] | null;
+  teamRadio: TeamRadioCapture[] | null;
   trackPositions: DriverLocation[];
   lapCount: { current: number; total: number } | null;
   trackStatus: string | null;
+  sessionStatus: string | null;
   sessionClock: string | null;
 
   // Controls
@@ -139,9 +150,13 @@ export function ReplayProvider({ children }: { children: ReactNode }) {
         stints: null,
         weather: null,
         raceControl: null,
+        carData: null,
+        pitStops: null,
+        teamRadio: null,
         trackPositions: [] as DriverLocation[],
         lapCount: null,
         trackStatus: null,
+        sessionStatus: null,
         sessionClock: null,
       };
     }
@@ -158,6 +173,9 @@ export function ReplayProvider({ children }: { children: ReactNode }) {
       stints: adaptStints(f1, sessionKeyNum),
       weather: adaptWeather(f1, sessionKeyNum),
       raceControl: adaptRaceControl(f1, sessionKeyNum),
+      carData: adaptCarData(f1, sessionKeyNum),
+      pitStops: adaptPitStops(f1),
+      teamRadio: adaptTeamRadio(f1),
       trackPositions: adaptTrackPositions(f1),
       lapCount:
         lapCount?.CurrentLap != null
@@ -167,6 +185,7 @@ export function ReplayProvider({ children }: { children: ReactNode }) {
             }
           : null,
       trackStatus: (trackStatus?.Status as string) ?? null,
+      sessionStatus: adaptSessionStatus(f1),
       sessionClock: (clock?.Remaining as string) ?? null,
     };
   }, [replayState.f1State, replayState.sessionInfo]);
