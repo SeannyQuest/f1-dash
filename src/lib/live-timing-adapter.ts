@@ -463,24 +463,37 @@ export interface PitStop {
 export interface TeamRadioCapture {
   driver_number: number;
   date: string;
-  /**
-   * Path is relative to the session archive root on F1's CDN,
-   * e.g. "TeamRadio/HAMILT01_44_20260308_140523.mp3".
-   * The frontend constructs the absolute URL based on the session.
-   */
-  path: string;
+  /** Absolute URL to the mp3, resolved at adapt time. */
+  audioUrl: string;
 }
+
+const TEAM_RADIO_CDN_BASE = "https://livetiming.formula1.com/static";
 
 /**
  * Flatten TeamRadio.Captures into a typed array.
+ *
  * F1 sends:
  *   { Captures: [{ Utc, RacingNumber, Path }] }
  * or (occasionally, as deltas) keyed by capture id:
  *   { Captures: { "0": {...}, "1": {...} } }
+ *
+ * `Path` is relative to the session archive root on F1's CDN; we construct
+ * the absolute mp3 URL from SessionInfo.Path so callers don't need a
+ * basePath parameter.
+ *
+ * Note: F1's CDN 403s TeamRadio.jsonStream for public clients even though
+ * the individual mp3 files are publicly accessible. This adapter handles the
+ * live SignalR case; for replay mode, use the OpenF1 team_radio REST
+ * endpoint (see useTeamRadio fallback in useF1Data.ts).
  */
 export function adaptTeamRadio(state: F1LiveState): TeamRadioCapture[] {
   const raw = state.TeamRadio as { Captures?: unknown } | undefined;
   if (!raw?.Captures) return [];
+
+  const sessionPath =
+    (state.SessionInfo as { Path?: string } | undefined)?.Path ?? "";
+  const trimmedBase = sessionPath.replace(/\/$/, "");
+  if (!trimmedBase) return [];
 
   let caps: Array<Record<string, unknown>>;
   if (Array.isArray(raw.Captures)) {
@@ -506,7 +519,11 @@ export function adaptTeamRadio(state: F1LiveState): TeamRadioCapture[] {
       continue;
     const driverNum = parseInt(num, 10);
     if (Number.isNaN(driverNum)) continue;
-    results.push({ driver_number: driverNum, date: utc, path });
+    results.push({
+      driver_number: driverNum,
+      date: utc,
+      audioUrl: `${TEAM_RADIO_CDN_BASE}/${trimmedBase}/${path}`,
+    });
   }
   // Newest first
   results.sort((a, b) => (a.date < b.date ? 1 : -1));

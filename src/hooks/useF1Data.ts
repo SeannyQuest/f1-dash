@@ -15,6 +15,7 @@ import {
   useStints as useStintsRest,
   useWeather as useWeatherRest,
   useRaceControl as useRaceControlRest,
+  useTeamRadio as useTeamRadioRest,
   useMeetings,
   useSessions,
 } from "@/hooks/useOpenF1";
@@ -174,32 +175,54 @@ export function useCarData(): { data: CarData[] | undefined } {
 }
 
 /**
- * Team radio captures (Utc, driver, mp3 path).
- * SignalR only — no REST/OpenF1 equivalent.
+ * Team radio captures.
+ *
+ * Priority:
+ *   1. Replay SignalR state (if replay includes TeamRadio — F1's CDN 403s
+ *      the jsonStream so this path rarely fires)
+ *   2. Live SignalR state
+ *   3. OpenF1 REST fallback (the only reliable source for archived sessions)
+ *
+ * The returned `audioUrl` is always absolute and publicly accessible.
  */
-export function useTeamRadio(): {
+export function useTeamRadio(sessionKey: string | null): {
   data: TeamRadioCapture[] | undefined;
-  basePath: string | null;
 } {
   const live = useLiveTiming();
   const replay = useReplay();
   const replayActive = replay != null && replay.status !== "idle";
-  if (replayActive && replay.teamRadio != null) {
-    return {
-      data: replay.teamRadio,
-      basePath: replay.sessionInfo?.path ?? null,
-    };
+
+  // REST session key: prefer the replay session when active, else the
+  // user-selected session. Gate the query so we don't double-fetch when live
+  // SignalR already has data.
+  const restSessionKey = replayActive
+    ? replay.sessionInfo?.sessionKey != null
+      ? String(replay.sessionInfo.sessionKey)
+      : null
+    : live.connected && live.teamRadio && live.teamRadio.length > 0
+      ? null
+      : sessionKey;
+
+  const rest = useTeamRadioRest(restSessionKey);
+
+  if (replayActive && replay.teamRadio && replay.teamRadio.length > 0) {
+    return { data: replay.teamRadio };
   }
-  if (live.connected && live.teamRadio !== null) {
-    // For live, we don't have a CDN path — construct a session-relative path
-    // from live session info if available. The relay's SessionInfo.Path field
-    // is the same shape F1 uses in its static archive.
-    const sessionPath =
-      (live.rawState?.SessionInfo as { Path?: string } | undefined)?.Path ??
-      null;
-    return { data: live.teamRadio, basePath: sessionPath };
+  if (live.connected && live.teamRadio && live.teamRadio.length > 0) {
+    return { data: live.teamRadio };
   }
-  return { data: undefined, basePath: null };
+  // REST fallback — map OpenF1 shape to our TeamRadioCapture type.
+  if (rest.data) {
+    const mapped: TeamRadioCapture[] = rest.data
+      .map((r) => ({
+        driver_number: r.driver_number,
+        date: r.date,
+        audioUrl: r.recording_url,
+      }))
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    return { data: mapped };
+  }
+  return { data: undefined };
 }
 
 export function useRaceControl(

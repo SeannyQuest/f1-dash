@@ -117,6 +117,26 @@ export function useWeather(
   });
 }
 
+export interface OpenF1TeamRadio {
+  session_key: number;
+  meeting_key: number;
+  driver_number: number;
+  date: string;
+  recording_url: string;
+}
+
+export function useTeamRadio(sessionKey: string | null) {
+  return useQuery<OpenF1TeamRadio[]>({
+    queryKey: ["f1", "team-radio", sessionKey],
+    queryFn: () =>
+      fetchAPI<OpenF1TeamRadio[]>("/api/f1/team-radio", {
+        session_key: sessionKey!,
+      }),
+    enabled: !!sessionKey,
+    staleTime: 60_000,
+  });
+}
+
 export function useRaceControl(
   sessionKey: string | null,
   refetchInterval?: number | false,

@@ -4,8 +4,6 @@ import { useMemo } from "react";
 import { PanelWrapper } from "@/components/layout/PanelWrapper";
 import { useTeamRadio, useDrivers } from "@/hooks/useF1Data";
 
-const F1_STATIC_BASE = "https://livetiming.formula1.com/static";
-
 interface RadioFeedProps {
   sessionKey: string | null;
   isLive: boolean;
@@ -31,7 +29,7 @@ export function RadioFeed({
   isLive,
   refetchInterval,
 }: RadioFeedProps) {
-  const { data: radios, basePath } = useTeamRadio();
+  const { data: radios } = useTeamRadio(sessionKey);
   const { data: drivers } = useDrivers(sessionKey, refetchInterval);
 
   const tlaByDriver = useMemo(() => {
@@ -45,12 +43,6 @@ export function RadioFeed({
     return radios.slice(0, 20);
   }, [radios]);
 
-  const buildUrl = (path: string): string | null => {
-    if (!basePath) return null;
-    const trimmedBase = basePath.replace(/\/$/, "");
-    return `${F1_STATIC_BASE}/${trimmedBase}/${path}`;
-  };
-
   if (!sessionKey) {
     return (
       <PanelWrapper title="Team Radio" isLive={isLive} className="h-full">
@@ -63,13 +55,13 @@ export function RadioFeed({
     <PanelWrapper title="Team Radio" isLive={isLive} className="h-full">
       {items.length === 0 ? (
         <p className="text-white/20 text-xs">
-          No radio yet — available during live sessions and replay
+          No radio captures for this session yet
         </p>
       ) : (
         <div className="flex flex-col gap-1">
           {items.map((r, i) => {
-            const tla = tlaByDriver.get(r.driver_number) ?? `#${r.driver_number}`;
-            const url = buildUrl(r.path);
+            const tla =
+              tlaByDriver.get(r.driver_number) ?? `#${r.driver_number}`;
             return (
               <div
                 key={`${r.date}-${r.driver_number}-${i}`}
@@ -81,19 +73,13 @@ export function RadioFeed({
                 <span className="text-[10px] font-bold text-white/90 w-8">
                   {tla}
                 </span>
-                {url ? (
-                  <audio
-                    controls
-                    preload="none"
-                    src={url}
-                    className="flex-1 h-6"
-                    style={{ maxHeight: 24 }}
-                  />
-                ) : (
-                  <span className="text-[10px] text-white/30 italic flex-1">
-                    audio path unavailable
-                  </span>
-                )}
+                <audio
+                  controls
+                  preload="none"
+                  src={r.audioUrl}
+                  className="flex-1 h-6"
+                  style={{ maxHeight: 24 }}
+                />
               </div>
             );
           })}
