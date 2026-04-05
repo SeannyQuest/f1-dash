@@ -25,6 +25,31 @@ interface CircuitData {
     y: number;
     angle: number;
   }[];
+  /** Display rotation in degrees (counter-clockwise). Applied to the polyline
+   * AND live driver positions before computing screen coordinates. */
+  rotation: number;
+  marshalSectors?: Array<{
+    number: number;
+    x: number;
+    y: number;
+    angle: number;
+  }>;
+}
+
+/** Rotate a point (x, y) by `angleDeg` around the origin (CCW). */
+function rotatePoint(
+  x: number,
+  y: number,
+  angleDeg: number,
+): { x: number; y: number } {
+  if (angleDeg === 0) return { x, y };
+  const rad = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return {
+    x: x * cos - y * sin,
+    y: x * sin + y * cos,
+  };
 }
 
 interface Bounds {
@@ -118,32 +143,50 @@ export function TrackMap({
     };
   }, [circuitKey, year]);
 
-  const bounds = useMemo(() => {
+  // Pre-rotate the track polyline once per circuit load using the broadcast
+  // rotation angle supplied by MultiViewer. Bounds are computed on the
+  // rotated polyline so everything (track, corners, dots) lives in the same
+  // display-oriented coordinate space.
+  const rotation = circuit?.rotation ?? 0;
+  const rotatedTrack = useMemo(() => {
     if (!circuit) return null;
-    return computeBounds(circuit.x, circuit.y);
-  }, [circuit]);
+    const rx: number[] = new Array(circuit.x.length);
+    const ry: number[] = new Array(circuit.y.length);
+    for (let i = 0; i < circuit.x.length; i++) {
+      const p = rotatePoint(circuit.x[i], circuit.y[i], rotation);
+      rx[i] = p.x;
+      ry[i] = p.y;
+    }
+    return { x: rx, y: ry };
+  }, [circuit, rotation]);
+
+  const bounds = useMemo(() => {
+    if (!rotatedTrack) return null;
+    return computeBounds(rotatedTrack.x, rotatedTrack.y);
+  }, [rotatedTrack]);
 
   // Build the track outline path
   const trackPath = useMemo(() => {
-    if (!circuit || !bounds) return "";
-    const points = circuit.x.map((x, i) => {
-      const p = transformPoint(x, circuit.y[i], bounds);
+    if (!rotatedTrack || !bounds) return "";
+    const points = rotatedTrack.x.map((x, i) => {
+      const p = transformPoint(x, rotatedTrack.y[i], bounds);
       return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
     });
     return `M ${points.join(" L ")} Z`;
-  }, [circuit, bounds]);
+  }, [rotatedTrack, bounds]);
 
-  // Map driver locations to screen positions
+  // Map driver locations to screen positions — rotate by the same angle so
+  // dots stay aligned with the track.
   const driverDots = useMemo(() => {
     if (!bounds || !drivers) return [];
-
     const driverMap = new Map(drivers.map((d) => [d.driver_number, d]));
 
     return locations
       .filter((loc) => driverMap.has(loc.driver_number))
       .map((loc) => {
         const driver = driverMap.get(loc.driver_number)!;
-        const pos = transformPoint(loc.x, loc.y, bounds);
+        const rotated = rotatePoint(loc.x, loc.y, rotation);
+        const pos = transformPoint(rotated.x, rotated.y, bounds);
         const color = driver.team_colour.startsWith("#")
           ? driver.team_colour
           : `#${driver.team_colour}`;
@@ -155,16 +198,17 @@ export function TrackMap({
           acronym: driver.name_acronym,
         };
       });
-  }, [locations, bounds, drivers]);
+  }, [locations, bounds, drivers, rotation]);
 
-  // Transform corner positions
+  // Transform corner positions through the same rotation pipeline.
   const corners = useMemo(() => {
     if (!circuit?.corners || !bounds) return [];
     return circuit.corners.map((c) => {
-      const pos = transformPoint(c.x, c.y, bounds);
+      const rotated = rotatePoint(c.x, c.y, rotation);
+      const pos = transformPoint(rotated.x, rotated.y, bounds);
       return { number: c.number, x: pos.x, y: pos.y };
     });
-  }, [circuit, bounds]);
+  }, [circuit, bounds, rotation]);
 
   const carCount = locations.length;
 
@@ -274,10 +318,15 @@ export function TrackMap({
             ))}
 
             {/* Start/Finish — checkered block at turn 1 */}
-            {circuit.x.length > 0 &&
+            {rotatedTrack &&
+              rotatedTrack.x.length > 0 &&
               bounds &&
               (() => {
-                const sf = transformPoint(circuit.x[0], circuit.y[0], bounds);
+                const sf = transformPoint(
+                  rotatedTrack.x[0],
+                  rotatedTrack.y[0],
+                  bounds,
+                );
                 // Checker pattern: 2 rows x 4 cols of alternating squares
                 const cellW = 5;
                 const cellH = 5;

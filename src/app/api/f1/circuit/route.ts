@@ -47,8 +47,17 @@ export async function GET(req: NextRequest) {
       y: c.trackPosition?.y ?? c.y,
     }));
 
+    // MultiViewer also returns a `rotation` field (degrees, CCW) that must be
+    // applied to the polyline AND driver positions to match broadcast
+    // orientation, plus `marshalSectors` for sector boundary visualization.
     return NextResponse.json(
-      { x: data.x, y: data.y, corners },
+      {
+        x: data.x,
+        y: data.y,
+        corners,
+        rotation: typeof data.rotation === "number" ? data.rotation : 0,
+        marshalSectors: data.marshalSectors ?? [],
+      },
       {
         headers: {
           "Cache-Control":
