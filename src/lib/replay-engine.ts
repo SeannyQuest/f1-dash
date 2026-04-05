@@ -11,7 +11,7 @@
  *   - Position.z / CarData.z — base64+zlib compressed
  */
 
-import { inflate } from "pako";
+import { inflateRaw } from "pako";
 import type { F1LiveState } from "./live-timing-adapter";
 
 // ── Types ──
@@ -118,7 +118,14 @@ function parseJsonStream(topic: string, text: string): TimelineEntry[] {
   return entries;
 }
 
-/** Decompress base64-encoded zlib data (for Position.z, CarData.z) */
+/**
+ * Decompress base64-encoded raw-deflate data (for Position.z, CarData.z).
+ *
+ * F1's archive ships these as raw deflate streams — NOT zlib-wrapped — so
+ * `inflateRaw` is required. Using `inflate` fails with "incorrect header check"
+ * and every line silently returns null, leaving state.Position / state.CarData
+ * empty and the TrackMap + TelemetryPanel blank during replay.
+ */
 function decompressZlib(data: string): unknown {
   try {
     const binaryStr = atob(data);
@@ -126,7 +133,7 @@ function decompressZlib(data: string): unknown {
     for (let i = 0; i < binaryStr.length; i++) {
       bytes[i] = binaryStr.charCodeAt(i);
     }
-    const decompressed = inflate(bytes);
+    const decompressed = inflateRaw(bytes);
     const text = new TextDecoder().decode(decompressed);
     return JSON.parse(text);
   } catch {
