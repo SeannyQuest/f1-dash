@@ -198,122 +198,160 @@ export function TrackMap({
           <div className="text-white/20 text-xs">No circuit data</div>
         </div>
       ) : (
-        <svg
-          viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
-          className="w-full h-full max-h-full object-contain"
-          preserveAspectRatio="xMidYMid meet"
+        <div
+          className="w-full h-full"
+          style={{
+            background:
+              "radial-gradient(ellipse at center, #0e1e36 0%, #060d1c 85%)",
+          }}
         >
-          {/* Track surface glow */}
-          <path
-            d={trackPath}
-            fill="none"
-            stroke="rgba(255,215,0,0.06)"
-            strokeWidth="32"
-            strokeLinejoin="round"
-          />
-          {/* Track outline — yellow/gold like F1 TV */}
-          <path
-            d={trackPath}
-            fill="none"
-            stroke="rgba(255,215,0,0.45)"
-            strokeWidth="22"
-            strokeLinejoin="round"
-          />
-          {/* Track center line */}
-          <path
-            d={trackPath}
-            fill="none"
-            stroke="rgba(15,17,26,0.6)"
-            strokeWidth="1"
-            strokeDasharray="6 4"
-          />
+          <svg
+            viewBox={`0 0 ${VIEW_SIZE} ${VIEW_SIZE}`}
+            className="w-full h-full max-h-full object-contain"
+            preserveAspectRatio="xMidYMid meet"
+          >
+            {/* Infield fill — dark green like F1 TV's grass */}
+            <path
+              d={trackPath}
+              fill="#1a3626"
+              stroke="none"
+              fillOpacity="0.55"
+            />
 
-          {/* Corner numbers */}
-          {corners.map((c) => (
-            <g key={`corner-${c.number}`}>
-              <circle cx={c.x} cy={c.y} r={9} fill="rgba(255,255,255,0.07)" />
-              <text
-                x={c.x}
-                y={c.y + 1}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill="rgba(255,255,255,0.35)"
-                fontSize="7"
-                fontFamily="monospace"
-                fontWeight="600"
-              >
-                {c.number}
-              </text>
-            </g>
-          ))}
+            {/* Track edge (white kerb line — outer) */}
+            <path
+              d={trackPath}
+              fill="none"
+              stroke="#ffffff"
+              strokeWidth="30"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              opacity="0.9"
+            />
+            {/* Track surface — desaturated cyan asphalt */}
+            <path
+              d={trackPath}
+              fill="none"
+              stroke="#5ba6a6"
+              strokeWidth="26"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+            {/* Track center highlight (subtle) */}
+            <path
+              d={trackPath}
+              fill="none"
+              stroke="rgba(255,255,255,0.08)"
+              strokeWidth="2"
+              strokeLinejoin="round"
+              strokeDasharray="10 8"
+            />
 
-          {/* Driver dots */}
-          {driverDots.map((dot) => (
-            <g key={dot.key}>
-              {/* Outer glow */}
-              <circle cx={dot.x} cy={dot.y} r={18} fill={`${dot.color}20`} />
-              {/* Drop shadow */}
-              <circle cx={dot.x} cy={dot.y + 1} r={11} fill="rgba(0,0,0,0.4)" />
-              {/* Car dot */}
-              <circle
-                cx={dot.x}
-                cy={dot.y}
-                r={11}
-                fill={dot.color}
-                stroke="rgba(0,0,0,0.7)"
-                strokeWidth={1.5}
-              />
-              {/* Driver abbreviation */}
-              <text
-                x={dot.x}
-                y={dot.y + 0.5}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fill="white"
-                fontSize="7"
-                fontWeight="bold"
-                fontFamily="monospace"
-                style={{ textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}
-              >
-                {dot.acronym}
-              </text>
-            </g>
-          ))}
+            {/* Corner numbers */}
+            {corners.map((c) => (
+              <g key={`corner-${c.number}`}>
+                <circle
+                  cx={c.x}
+                  cy={c.y}
+                  r={10}
+                  fill="#0a1628"
+                  stroke="rgba(255,255,255,0.35)"
+                  strokeWidth="1"
+                />
+                <text
+                  x={c.x}
+                  y={c.y + 1}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="rgba(255,255,255,0.75)"
+                  fontSize="8"
+                  fontFamily="monospace"
+                  fontWeight="700"
+                >
+                  {c.number}
+                </text>
+              </g>
+            ))}
 
-          {/* Start/Finish marker */}
-          {circuit.x.length > 0 &&
-            bounds &&
-            (() => {
-              const sf = transformPoint(circuit.x[0], circuit.y[0], bounds);
-              return (
-                <g>
-                  {/* Checkered pattern hint */}
-                  <rect
-                    x={sf.x - 14}
-                    y={sf.y - 18}
-                    width={28}
-                    height={11}
-                    rx={2}
-                    fill="rgba(255,255,255,0.12)"
-                    stroke="rgba(255,255,255,0.2)"
-                    strokeWidth={0.5}
-                  />
-                  <text
-                    x={sf.x}
-                    y={sf.y - 11.5}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    fill="rgba(255,255,255,0.5)"
-                    fontSize="7"
-                    fontFamily="monospace"
-                    fontWeight="bold"
-                  >
-                    S/F
-                  </text>
-                </g>
-              );
-            })()}
-        </svg>
+            {/* Start/Finish — checkered block at turn 1 */}
+            {circuit.x.length > 0 &&
+              bounds &&
+              (() => {
+                const sf = transformPoint(circuit.x[0], circuit.y[0], bounds);
+                // Checker pattern: 2 rows x 4 cols of alternating squares
+                const cellW = 5;
+                const cellH = 5;
+                const startX = sf.x - cellW * 2;
+                const startY = sf.y - cellH - 18;
+                const cells = [];
+                for (let r = 0; r < 2; r++) {
+                  for (let c = 0; c < 4; c++) {
+                    cells.push(
+                      <rect
+                        key={`sf-${r}-${c}`}
+                        x={startX + c * cellW}
+                        y={startY + r * cellH}
+                        width={cellW}
+                        height={cellH}
+                        fill={(r + c) % 2 === 0 ? "#ffffff" : "#0a1628"}
+                      />,
+                    );
+                  }
+                }
+                return (
+                  <g>
+                    {cells}
+                    <line
+                      x1={sf.x}
+                      y1={startY + cellH * 2 + 1}
+                      x2={sf.x}
+                      y2={sf.y}
+                      stroke="rgba(255,255,255,0.5)"
+                      strokeWidth="1"
+                    />
+                  </g>
+                );
+              })()}
+
+            {/* Driver dots */}
+            {driverDots.map((dot) => (
+              <g key={dot.key}>
+                {/* Outer glow */}
+                <circle cx={dot.x} cy={dot.y} r={16} fill={`${dot.color}25`} />
+                {/* Drop shadow */}
+                <circle
+                  cx={dot.x}
+                  cy={dot.y + 1.5}
+                  r={10}
+                  fill="rgba(0,0,0,0.55)"
+                />
+                {/* Car dot */}
+                <circle
+                  cx={dot.x}
+                  cy={dot.y}
+                  r={10}
+                  fill={dot.color}
+                  stroke="#ffffff"
+                  strokeWidth={1.5}
+                />
+                {/* Driver abbreviation */}
+                <text
+                  x={dot.x}
+                  y={dot.y + 0.5}
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                  fill="white"
+                  fontSize="7"
+                  fontWeight="bold"
+                  fontFamily="monospace"
+                  style={{ textShadow: "0 1px 2px rgba(0,0,0,0.9)" }}
+                >
+                  {dot.acronym}
+                </text>
+              </g>
+            ))}
+          </svg>
+        </div>
       )}
     </PanelWrapper>
   );
