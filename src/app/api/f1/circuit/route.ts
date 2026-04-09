@@ -63,7 +63,12 @@ export async function GET(req: NextRequest) {
         y: data.y,
         corners,
         rotation: typeof data.rotation === "number" ? data.rotation : 0,
-        marshalSectors: data.marshalSectors ?? [],
+        marshalSectors: (data.marshalSectors || []).map((s: RawTrackPoint) => ({
+          number: s.number,
+          x: s.trackPosition?.x ?? s.x,
+          y: s.trackPosition?.y ?? s.y,
+          angle: s.angle,
+        })),
         marshalLights,
       },
       {

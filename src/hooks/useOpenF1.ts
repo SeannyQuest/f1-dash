@@ -13,6 +13,14 @@ import type {
   Interval,
 } from "@/types";
 
+class APIError extends Error {
+  status: number;
+  constructor(status: number) {
+    super(`API error: ${status}`);
+    this.status = status;
+  }
+}
+
 async function fetchAPI<T>(
   path: string,
   params: Record<string, string> = {},
@@ -22,8 +30,14 @@ async function fetchAPI<T>(
     if (value) url.searchParams.set(key, value);
   });
   const res = await fetch(url.toString());
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new APIError(res.status);
   return res.json() as Promise<T>;
+}
+
+// Don't retry on 429 (rate limit) — back off instead
+function shouldRetry(failureCount: number, error: Error): boolean {
+  if (error instanceof APIError && error.status === 429) return false;
+  return failureCount < 2;
 }
 
 export function useMeetings(year: string) {
@@ -33,7 +47,7 @@ export function useMeetings(year: string) {
     enabled: !!year,
     staleTime: 5 * 60 * 1000, // 5 min — meetings rarely change
     gcTime: 30 * 60 * 1000, // keep in cache 30 min
-    retry: 2,
+    retry: shouldRetry,
   });
 }
 
@@ -45,7 +59,7 @@ export function useSessions(meetingKey: string | null) {
     enabled: !!meetingKey,
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
-    retry: 2,
+    retry: shouldRetry,
   });
 }
 
