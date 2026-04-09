@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 // that match the OpenF1 location coordinate space
 const MULTIVIEWER_API = "https://api.multiviewer.app/api/v1/circuits";
 
-interface RawCorner {
+interface RawTrackPoint {
   number: number;
   letter?: string;
   angle: number;
@@ -41,15 +41,22 @@ export async function GET(req: NextRequest) {
     const data = await res.json();
 
     // Normalize corner data — MultiViewer uses trackPosition.x/y on some circuits
-    const corners = (data.corners || []).map((c: RawCorner) => ({
+    const corners = (data.corners || []).map((c: RawTrackPoint) => ({
       number: c.number,
       x: c.trackPosition?.x ?? c.x,
       y: c.trackPosition?.y ?? c.y,
     }));
 
-    // MultiViewer also returns a `rotation` field (degrees, CCW) that must be
-    // applied to the polyline AND driver positions to match broadcast
-    // orientation, plus `marshalSectors` for sector boundary visualization.
+    // Normalize marshal light positions (same trackPosition pattern as corners)
+    const marshalLights = (data.marshalLights || []).map(
+      (m: RawTrackPoint) => ({
+        number: m.number,
+        x: m.trackPosition?.x ?? m.x,
+        y: m.trackPosition?.y ?? m.y,
+        angle: m.angle,
+      }),
+    );
+
     return NextResponse.json(
       {
         x: data.x,
@@ -57,6 +64,7 @@ export async function GET(req: NextRequest) {
         corners,
         rotation: typeof data.rotation === "number" ? data.rotation : 0,
         marshalSectors: data.marshalSectors ?? [],
+        marshalLights,
       },
       {
         headers: {
